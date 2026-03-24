@@ -796,21 +796,6 @@ export default function KanbanBoard() {
   };
 
 
-  const formatRelative = (iso?: string | null) => {
-    if (!iso) return "-";
-    const ts = Date.parse(iso);
-    if (Number.isNaN(ts) || !nowTs) return "-";
-    const diffMs = nowTs - ts;
-    const absMin = Math.floor(Math.abs(diffMs) / 60000);
-
-    if (absMin < 1) return "just now";
-    if (absMin < 60) return `${absMin}m ago`;
-    const hrs = Math.floor(absMin / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.floor(hrs / 24);
-    return `${days}d ago`;
-  };
-
   const shellStyle = bgImageUrl
     ? {
         backgroundImage: `linear-gradient(rgba(2,6,23,${bgOverlay / 100}), rgba(2,6,23,${bgOverlay / 100})), url(${bgImageUrl})`,
