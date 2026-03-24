@@ -1,48 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-
-type Objective = "skyworks" | "personal" | "side_hustles";
-type Status = "backlog" | "in_progress" | "review" | "completed";
-type Priority = "P0" | "P1" | "P2" | "P3";
-
-type Task = {
-  id: string;
-  title: string;
-  project?: string | null;
-  objective: Objective;
-  status: Status;
-  priority: Priority;
-  sort_order: number;
-  owner?: string;
-  started_at?: string | null;
-  eta?: string | null;
-  blocked_reason?: string | null;
-  risk_state?: "normal" | "watch" | "at_risk" | "blocked";
-  created_at: string;
-  updated_at: string;
-};
-
-type ActivityEvent = {
-  message: string;
-  at: string;
-};
-
-const OBJECTIVES: { key: Objective; label: string; color: string }[] = [
-  { key: "skyworks", label: "Skyworks", color: "bg-blue-500" },
-  { key: "personal", label: "Personal", color: "bg-green-500" },
-  { key: "side_hustles", label: "Side Hustles", color: "bg-purple-500" },
-];
-
-const PRIORITIES: Priority[] = ["P0", "P1", "P2", "P3"];
-const RISK_STATES: Array<NonNullable<Task["risk_state"]>> = ["normal", "watch", "at_risk", "blocked"];
-
-const COLUMNS: { key: Status; label: string }[] = [
-  { key: "backlog", label: "Backlog" },
-  { key: "in_progress", label: "In Progress" },
-  { key: "review", label: "Review" },
-  { key: "completed", label: "Completed" },
-];
+import {
+  type Objective,
+  type Status,
+  type Priority,
+  type Task,
+  type ActivityEvent,
+  OBJECTIVES,
+  PRIORITIES,
+  RISK_STATES,
+  COLUMNS,
+} from "./types";
+import TaskCard from "./TaskCard";
+import FilterBar from "./FilterBar";
+import ActivityLog from "./ActivityLog";
+import KanbanColumn from "./KanbanColumn";
 
 export default function KanbanBoard() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -697,12 +670,16 @@ export default function KanbanBoard() {
     const summary = [
       `Kanban Summary (${new Date().toLocaleString()})`,
       `Visible tasks: ${visibleTasks.length}/${tasks.length}`,
-      `Filters: project=${projectFilter}, objective=${objectiveFilter}, risk=${riskFilter}, time=${timeFilter}`,
+      `Filters: project=${projectFilter}, objective=${objectiveFilter}, risk=${riskFilter}, time=${timeFilter}, search=${searchQuery.trim() || "(none)"}`,
       `Columns: backlog=${statusCounts.backlog}, in_progress=${statusCounts.inProgress}, review=${statusCounts.review}, completed=${statusCounts.completed}`,
-      `Risk: at_risk=${riskSummary.atRisk}, watch=${riskSummary.watch}, blocked=${riskSummary.blocked}, due_24h=${riskSummary.dueSoon}`,
+      `Risk: at_risk=${riskSummary.atRisk}, watch=${riskSummary.watch}, blocked=${riskSummary.blocked}, due_24h=${riskSummary.dueSoon}, stale_in_progress=${riskSummary.staleInProgress}`,
       `Top urgent:`,
       ...(topUrgentTasks.length
-        ? topUrgentTasks.map((t) => `- ${t.title} [${t.priority}] (${t.status})`)
+        ? topUrgentTasks.map((t) => {
+            const blocked = (t.blocked_reason ?? "").trim() ? " [BLOCKED]" : "";
+            const due = t.eta ? ` eta=${new Date(t.eta).toLocaleString()}` : "";
+            return `- ${t.title} [${t.priority}] (${t.status})${blocked}${due}`;
+          })
         : ["- none"]),
     ].join("\n");
 
@@ -832,23 +809,6 @@ export default function KanbanBoard() {
     logActivity(`Cleared ${completed.length} completed task(s)`);
   };
 
-  const objectiveMeta = (obj: Objective) => OBJECTIVES.find((o) => o.key === obj)!;
-
-  const formatRelative = (iso?: string | null) => {
-    if (!iso) return "-";
-    const ts = Date.parse(iso);
-    if (Number.isNaN(ts) || !nowTs) return "-";
-    const diffMs = nowTs - ts;
-    const absMin = Math.floor(Math.abs(diffMs) / 60000);
-
-    if (absMin < 1) return "just now";
-    if (absMin < 60) return `${absMin}m ago`;
-    const hrs = Math.floor(absMin / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.floor(hrs / 24);
-    return `${days}d ago`;
-  };
-
   const shellStyle = bgImageUrl
     ? {
         backgroundImage: `linear-gradient(rgba(2,6,23,${bgOverlay / 100}), rgba(2,6,23,${bgOverlay / 100})), url(${bgImageUrl})`,
@@ -943,200 +903,37 @@ export default function KanbanBoard() {
             Reset Draft
           </button>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <input
-            ref={searchInputRef}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search title/project/blocker (press /)"
-            className="min-h-9 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
-          />
-          {searchQuery ? (
-            <button
-              className="rounded border border-slate-700 px-2 py-1 text-xs hover:bg-slate-800"
-              onClick={() => {
-                setSearchQuery("");
-                searchInputRef.current?.focus();
-              }}
-            >
-              Clear search
-            </button>
-          ) : null}
-
-          <label className="text-slate-400">Project view</label>
-          <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} className="rounded border border-slate-700 bg-slate-950 px-2 py-1">
-            <option value="all">All projects</option>
-            {projectOptions.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-
-          <label className="ml-0 sm:ml-3 text-slate-400">Objective</label>
-          <select
-            value={objectiveFilter}
-            onChange={(e) => setObjectiveFilter(e.target.value as Objective | "all")}
-            className="rounded border border-slate-700 bg-slate-950 px-2 py-1"
-          >
-            <option value="all">All objectives</option>
-            {OBJECTIVES.map((o) => (
-              <option key={o.key} value={o.key}>{o.label}</option>
-            ))}
-          </select>
-
-          <label className="ml-0 sm:ml-3 text-slate-400">Risk</label>
-          <select
-            value={riskFilter}
-            onChange={(e) => setRiskFilter(e.target.value as "all" | "normal" | "watch" | "at_risk" | "blocked")}
-            className="rounded border border-slate-700 bg-slate-950 px-2 py-1"
-          >
-            <option value="all">All risk</option>
-            <option value="normal">Normal</option>
-            <option value="watch">Watch</option>
-            <option value="at_risk">At risk</option>
-            <option value="blocked">Blocked</option>
-          </select>
-
-          <label className="ml-0 sm:ml-3 text-slate-400">Time</label>
-          <select
-            value={timeFilter}
-            onChange={(e) => setTimeFilter(e.target.value as "all" | "due_24h" | "stale_in_progress")}
-            className="rounded border border-slate-700 bg-slate-950 px-2 py-1"
-          >
-            <option value="all">All time</option>
-            <option value="due_24h">Due &lt; 24h</option>
-            <option value="stale_in_progress">Stale in-progress</option>
-          </select>
-
-          <button
-            className="rounded border border-slate-700 px-2 py-1 text-xs hover:bg-slate-800"
-            onClick={() => {
-              setProjectFilter("all");
-              setObjectiveFilter("all");
-              setRiskFilter("all");
-              setTimeFilter("all");
-              setSearchQuery("");
-            }}
-          >
-            Clear filters
-          </button>
-
-          <label className="ml-0 sm:ml-3 flex items-center gap-2 text-slate-400 text-xs">
-            <input
-              type="checkbox"
-              checked={confirmDelete}
-              onChange={(e) => setConfirmDelete(e.target.checked)}
-            />
-            Confirm delete
-          </label>
-
-          <label className="flex items-center gap-2 text-slate-400 text-xs">
-            <input
-              type="checkbox"
-              checked={showRelativeTimes}
-              onChange={(e) => setShowRelativeTimes(e.target.checked)}
-            />
-            Show relative times
-          </label>
-
-          <label className="flex items-center gap-2 text-slate-400 text-xs">
-            <input
-              type="checkbox"
-              checked={showActivityPanel}
-              onChange={(e) => setShowActivityPanel(e.target.checked)}
-            />
-            Show activity panel
-          </label>
-
-          <label className="flex items-center gap-2 text-slate-400 text-xs">
-            <input
-              type="checkbox"
-              checked={compactCards}
-              onChange={(e) => setCompactCards(e.target.checked)}
-            />
-            Compact cards
-          </label>
-
-          <label className="flex items-center gap-2 text-slate-400 text-xs">
-            <input
-              type="checkbox"
-              checked={showBackgroundPanel}
-              onChange={(e) => setShowBackgroundPanel(e.target.checked)}
-            />
-            Show background panel
-          </label>
-
-          <label className="flex items-center gap-2 text-slate-400 text-xs">
-            <input
-              type="checkbox"
-              checked={showTopUrgentPanel}
-              onChange={(e) => setShowTopUrgentPanel(e.target.checked)}
-            />
-            Show top urgent panel
-          </label>
-
-          <label className="flex items-center gap-2 text-slate-400 text-xs">
-            <input
-              type="checkbox"
-              checked={showTipsPanel}
-              onChange={(e) => setShowTipsPanel(e.target.checked)}
-            />
-            Show tips panel
-          </label>
-        </div>
-        <p className="text-xs text-slate-400">WIP limit active: max 1 task in “In Progress”. Drag and drop cards between columns is enabled.</p>
-        <p className="text-xs text-slate-500">Showing {visibleTasks.length} of {tasks.length} tasks with active filters.</p>
-        <div className="flex flex-wrap gap-2 text-xs">
-          <button
-            className="rounded-full border border-red-700/60 bg-red-950/40 px-2 py-1 text-red-200 hover:bg-red-900/40"
-            onClick={() => setRiskFilter("at_risk")}
-          >
-            At risk: {riskSummary.atRisk}
-          </button>
-          <button
-            className="rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-1 text-amber-200 hover:bg-amber-900/40"
-            onClick={() => setRiskFilter("normal")}
-          >
-            Normal: {riskSummary.normal}
-          </button>
-          <button
-            className="rounded-full border border-yellow-700/60 bg-yellow-950/40 px-2 py-1 text-yellow-200 hover:bg-yellow-900/40"
-            onClick={() => setRiskFilter("watch")}
-          >
-            Watch: {riskSummary.watch}
-          </button>
-          <button
-            className="rounded-full border border-sky-700/60 bg-sky-950/40 px-2 py-1 text-sky-200 hover:bg-sky-900/40"
-            onClick={() => setTimeFilter("due_24h")}
-          >
-            Due &lt; 24h: {riskSummary.dueSoon}
-          </button>
-          <button
-            className="rounded-full border border-purple-700/60 bg-purple-950/40 px-2 py-1 text-purple-200 hover:bg-purple-900/40"
-            onClick={() => setRiskFilter("blocked")}
-          >
-            Blocked: {riskSummary.blocked}
-          </button>
-          <button
-            className="rounded-full border border-orange-700/60 bg-orange-950/40 px-2 py-1 text-orange-200 hover:bg-orange-900/40"
-            onClick={() => setTimeFilter("stale_in_progress")}
-          >
-            Stale in-progress (&gt;48h): {riskSummary.staleInProgress}
-          </button>
-          {riskFilter !== "all" ? (
-            <button
-              className="rounded-full border border-slate-600 px-2 py-1 text-slate-300 hover:bg-slate-800"
-              onClick={() => setRiskFilter("all")}
-            >
-              Clear risk filter
-            </button>
-          ) : null}
-          {timeFilter !== "all" ? (
-            <button
-              className="rounded-full border border-slate-600 px-2 py-1 text-slate-300 hover:bg-slate-800"
-              onClick={() => setTimeFilter("all")}
-            >
-              Clear time filter
-            </button>
-          ) : null}
-        </div>
+        <FilterBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchInputRef={searchInputRef}
+          projectFilter={projectFilter}
+          onProjectFilterChange={setProjectFilter}
+          projectOptions={projectOptions}
+          objectiveFilter={objectiveFilter}
+          onObjectiveFilterChange={setObjectiveFilter}
+          riskFilter={riskFilter}
+          onRiskFilterChange={setRiskFilter}
+          timeFilter={timeFilter}
+          onTimeFilterChange={setTimeFilter}
+          confirmDelete={confirmDelete}
+          onConfirmDeleteChange={setConfirmDelete}
+          showRelativeTimes={showRelativeTimes}
+          onShowRelativeTimesChange={setShowRelativeTimes}
+          showActivityPanel={showActivityPanel}
+          onShowActivityPanelChange={setShowActivityPanel}
+          compactCards={compactCards}
+          onCompactCardsChange={setCompactCards}
+          showBackgroundPanel={showBackgroundPanel}
+          onShowBackgroundPanelChange={setShowBackgroundPanel}
+          showTopUrgentPanel={showTopUrgentPanel}
+          onShowTopUrgentPanelChange={setShowTopUrgentPanel}
+          showTipsPanel={showTipsPanel}
+          onShowTipsPanelChange={setShowTipsPanel}
+          visibleCount={visibleTasks.length}
+          totalCount={tasks.length}
+          riskSummary={riskSummary}
+        />
 
         {showTopUrgentPanel ? (
           <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
@@ -1200,196 +997,48 @@ export default function KanbanBoard() {
       ) : null}
 
       {showActivityPanel ? (
-        <section className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-semibold">Recent Activity</h2>
-            <button
-              className="text-xs rounded border border-slate-700 px-2 py-1 hover:bg-slate-800"
-              onClick={() => {
-                setActivity([]);
-                window.localStorage.removeItem("kb_activity_v1");
-              }}
-            >
-              Clear
-            </button>
-          </div>
-          {activity.length === 0 ? (
-            <p className="text-sm text-slate-500">No recent activity yet.</p>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {activity.slice(0, 8).map((event, idx) => (
-                <li key={`${event.at}-${idx}`} className="flex items-start justify-between gap-3 rounded-md border border-slate-800 bg-slate-950 px-3 py-2">
-                  <span className="text-slate-200">{event.message}</span>
-                  <span className="shrink-0 text-xs text-slate-500">{new Date(event.at).toLocaleTimeString()}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <ActivityLog
+          activity={activity}
+          onClear={() => {
+            setActivity([]);
+            window.localStorage.removeItem("kb_activity_v1");
+          }}
+        />
       ) : null}
 
       {loading ? <p className="text-slate-400">Loading tasks...</p> : null}
 
       <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {COLUMNS.map((col) => (
-          <div
+          <KanbanColumn
             key={col.key}
-            className={`rounded-xl border p-4 transition ${dropColumn === col.key ? "border-blue-500 bg-slate-900/90" : "border-slate-800 bg-slate-900"}`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDropColumn(col.key);
-            }}
+            label={col.label}
+            colKey={col.key}
+            tasks={grouped[col.key]}
+            backlogLength={grouped.backlog.length}
+            isDropTarget={dropColumn === col.key}
+            draggingTaskId={draggingTaskId}
+            compactCards={compactCards}
+            nowTs={nowTs}
+            showRelativeTimes={showRelativeTimes}
+            onDragOver={() => setDropColumn(col.key)}
             onDragLeave={() => setDropColumn((prev) => (prev === col.key ? null : prev))}
-            onDrop={(e) => {
-              e.preventDefault();
-              const taskId = e.dataTransfer.getData("text/task-id");
-              if (taskId) {
-                void handleDropToColumn(taskId, col.key);
-              }
-            }}
-          >
-            <h3 className="font-semibold mb-3">{col.label} ({grouped[col.key].length})</h3>
-            <div className="space-y-3">
-              {grouped[col.key].map((task, idx) => {
-                const meta = objectiveMeta(task.objective);
-                return (
-                  <article
-                    key={task.id}
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData("text/task-id", task.id);
-                      setDraggingTaskId(task.id);
-                    }}
-                    onDragEnd={() => {
-                      setDraggingTaskId(null);
-                      setDropColumn(null);
-                    }}
-                    className={`rounded-lg border bg-slate-950 ${compactCards ? "p-2 space-y-2" : "p-3 space-y-3"} ${draggingTaskId === task.id ? "border-blue-500 opacity-70" : "border-slate-700"}`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-1">
-                        <p className="font-medium">{task.title}</p>
-                        <div className="flex flex-wrap gap-1">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${meta.color}`}>{meta.label}</span>
-                          {task.risk_state === "at_risk" ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-700 text-white">AT RISK</span>
-                          ) : task.risk_state === "watch" ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-700 text-white">WATCH</span>
-                          ) : (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-100">NORMAL</span>
-                          )}
-                          {(task.blocked_reason ?? "").trim() ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-700 text-white">BLOCKED</span>
-                          ) : null}
-                          {task.eta ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-700 text-white">ETA {new Date(task.eta).toLocaleDateString()}</span>
-                          ) : null}
-                          {task.status === "in_progress" && task.started_at && nowTs - Date.parse(task.started_at) > 48 * 60 * 60 * 1000 ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-700 text-white">STALE &gt;48H</span>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <label className="text-slate-400">Priority</label>
-                      <select value={task.priority} onChange={(e) => setPriorityForTask(task.id, e.target.value as Priority)} className="rounded border border-slate-700 bg-slate-900 px-2 py-1">
-                        {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <label className="text-slate-400">Project</label>
-                      <input
-                        value={task.project ?? ""}
-                        onChange={(e) => setProjectDraft(task.id, e.target.value)}
-                        onBlur={(e) => {
-                          void setProjectForTask(task.id, e.currentTarget.value);
-                        }}
-                        placeholder="Unassigned"
-                        className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      <div className="flex items-center gap-2">
-                        <label className="text-slate-400">Risk</label>
-                        <select
-                          value={task.risk_state ?? "normal"}
-                          onChange={(e) => void setRiskForTask(task.id, e.target.value as NonNullable<Task["risk_state"]>)}
-                          className="rounded border border-slate-700 bg-slate-900 px-2 py-1"
-                        >
-                          {RISK_STATES.map((r) => (
-                            <option key={r} value={r}>{r}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-slate-400">ETA</label>
-                        <input
-                          type="datetime-local"
-                          defaultValue={task.eta ? task.eta.slice(0, 16) : ""}
-                          onBlur={(e) => {
-                            const v = e.currentTarget.value;
-                            void setEtaForTask(task.id, v ? new Date(v).toISOString() : "");
-                          }}
-                          className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2 text-xs">
-                      <label className="text-slate-400 mt-1">Blocker</label>
-                      <input
-                        defaultValue={task.blocked_reason ?? ""}
-                        onBlur={(e) => {
-                          void setBlockedReasonForTask(task.id, e.currentTarget.value.trim());
-                        }}
-                        placeholder="Optional blocked reason"
-                        className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
-                      />
-                    </div>
-                    {showRelativeTimes ? (
-                      <p className="text-[11px] text-slate-500">Updated {formatRelative(task.updated_at)} · Created {formatRelative(task.created_at)}</p>
-                    ) : null}
-                    <div className="flex gap-2 flex-wrap">
-                      {col.key === "backlog" ? (
-                        <>
-                          <button className="min-h-9 text-xs rounded border border-slate-600 px-3 py-1.5" onClick={() => reorderBacklog(task.id, "up")} disabled={idx===0}>↑</button>
-                          <button className="min-h-9 text-xs rounded border border-slate-600 px-3 py-1.5" onClick={() => reorderBacklog(task.id, "down")} disabled={idx===grouped.backlog.length-1}>↓</button>
-                        </>
-                      ) : null}
-                      {col.key !== "backlog" && (
-                        <button
-                          className="min-h-9 text-xs rounded border border-slate-600 px-3 py-1.5"
-                          onClick={() =>
-                            moveTask(
-                              task.id,
-                              col.key === "in_progress" ? "backlog" : col.key === "review" ? "in_progress" : "review"
-                            )
-                          }
-                        >
-                          ← Back
-                        </button>
-                      )}
-                      {col.key !== "completed" && (
-                        <button
-                          className="min-h-9 text-xs rounded border border-slate-600 px-3 py-1.5"
-                          onClick={() =>
-                            moveTask(
-                              task.id,
-                              col.key === "backlog" ? "in_progress" : col.key === "in_progress" ? "review" : "completed"
-                            )
-                          }
-                        >
-                          Next →
-                        </button>
-                      )}
-                      <button className="min-h-9 text-xs rounded border border-cyan-700 text-cyan-300 px-3 py-1.5" onClick={() => duplicateTask(task.id)}>Duplicate</button>
-                      <button className="min-h-9 text-xs rounded border border-red-700 text-red-300 px-3 py-1.5" onClick={() => deleteTask(task.id)}>Delete</button>
-                    </div>
-                  </article>
-                );
-              })}
-              {grouped[col.key].length === 0 ? <p className="text-sm text-slate-500">No tasks</p> : null}
-            </div>
-          </div>
+            onDrop={(taskId) => void handleDropToColumn(taskId, col.key)}
+            onDragStart={(taskId) => setDraggingTaskId(taskId)}
+            onDragEnd={() => { setDraggingTaskId(null); setDropColumn(null); }}
+            onSetPriority={(taskId, p) => void setPriorityForTask(taskId, p)}
+            onSetProjectDraft={(taskId, v) => setProjectDraft(taskId, v)}
+            onSetProject={(taskId, v) => void setProjectForTask(taskId, v)}
+            onSetRisk={(taskId, r) => void setRiskForTask(taskId, r)}
+            onSetEta={(taskId, eta) => void setEtaForTask(taskId, eta)}
+            onSetBlockedReason={(taskId, reason) => void setBlockedReasonForTask(taskId, reason)}
+            onReorderUp={(taskId) => void reorderBacklog(taskId, "up")}
+            onReorderDown={(taskId) => void reorderBacklog(taskId, "down")}
+            onMoveBack={(taskId) => moveTask(taskId, col.key === "in_progress" ? "backlog" : col.key === "review" ? "in_progress" : "review")}
+            onMoveNext={(taskId) => moveTask(taskId, col.key === "backlog" ? "in_progress" : col.key === "in_progress" ? "review" : "completed")}
+            onDuplicate={(taskId) => void duplicateTask(taskId)}
+            onDelete={(taskId) => deleteTask(taskId)}
+          />
         ))}
       </section>
     </main>
