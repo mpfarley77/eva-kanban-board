@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActivityEvent, Objective, Priority, Status, Task } from "./types";
 import { COLUMNS, OBJECTIVES, PRIORITIES } from "./types";
-import TaskCard from "./TaskCard";
+import KanbanColumn from "./KanbanColumn";
 
 export default function KanbanBoard() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -1192,52 +1192,31 @@ export default function KanbanBoard() {
 
       <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {COLUMNS.map((col) => (
-          <div
+          <KanbanColumn
             key={col.key}
-            className={`rounded-xl border p-4 transition ${dropColumn === col.key ? "border-blue-500 bg-slate-900/90" : "border-slate-800 bg-slate-900"}`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDropColumn(col.key);
-            }}
+            col={col}
+            tasks={grouped[col.key]}
+            isDropTarget={dropColumn === col.key}
+            draggingTaskId={draggingTaskId}
+            compactCards={compactCards}
+            showRelativeTimes={showRelativeTimes}
+            nowTs={nowTs}
+            onDragOver={() => setDropColumn(col.key)}
             onDragLeave={() => setDropColumn((prev) => (prev === col.key ? null : prev))}
-            onDrop={(e) => {
-              e.preventDefault();
-              const taskId = e.dataTransfer.getData("text/task-id");
-              if (taskId) {
-                void handleDropToColumn(taskId, col.key);
-              }
-            }}
-          >
-            <h3 className="font-semibold mb-3">{col.label} ({grouped[col.key].length})</h3>
-            <div className="space-y-3">
-              {grouped[col.key].map((task, idx) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  colKey={col.key}
-                  isFirst={idx === 0}
-                  isLast={idx === grouped[col.key].length - 1}
-                  isDragging={draggingTaskId === task.id}
-                  compactCards={compactCards}
-                  showRelativeTimes={showRelativeTimes}
-                  nowTs={nowTs}
-                  onSetPriority={setPriorityForTask}
-                  onSetProjectDraft={setProjectDraft}
-                  onSetProject={setProjectForTask}
-                  onSetRisk={setRiskForTask}
-                  onSetEta={setEtaForTask}
-                  onSetBlockedReason={setBlockedReasonForTask}
-                  onMove={moveTask}
-                  onReorder={reorderBacklog}
-                  onDuplicate={(id) => void duplicateTask(id)}
-                  onDelete={deleteTask}
-                  onDragStart={setDraggingTaskId}
-                  onDragEnd={() => { setDraggingTaskId(null); setDropColumn(null); }}
-                />
-              ))}
-              {grouped[col.key].length === 0 ? <p className="text-sm text-slate-500">No tasks</p> : null}
-            </div>
-          </div>
+            onDrop={(taskId) => void handleDropToColumn(taskId, col.key)}
+            onSetPriority={setPriorityForTask}
+            onSetProjectDraft={setProjectDraft}
+            onSetProject={setProjectForTask}
+            onSetRisk={setRiskForTask}
+            onSetEta={setEtaForTask}
+            onSetBlockedReason={setBlockedReasonForTask}
+            onMove={moveTask}
+            onReorder={reorderBacklog}
+            onDuplicate={(id) => void duplicateTask(id)}
+            onDelete={deleteTask}
+            onDragStart={setDraggingTaskId}
+            onDragEnd={() => { setDraggingTaskId(null); setDropColumn(null); }}
+          />
         ))}
       </section>
     </main>
