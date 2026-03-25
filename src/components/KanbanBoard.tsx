@@ -35,6 +35,7 @@ export default function KanbanBoard() {
   const searchQueryRef = useRef("");
   const [bgImageUrl, setBgImageUrl] = useState("");
   const [bgOverlay, setBgOverlay] = useState(55);
+  const [bgUploading, setBgUploading] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dropColumn, setDropColumn] = useState<Status | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(true);
@@ -106,16 +107,32 @@ export default function KanbanBoard() {
   }, []);
 
   useEffect(() => {
-    const savedUrl = window.localStorage.getItem("kb_bg_image_url") ?? "";
     const savedOverlay = Number(window.localStorage.getItem("kb_bg_overlay") ?? "55");
-
-    if (savedUrl && savedUrl.startsWith("http")) {
-      setBgImageUrl(savedUrl);
-    } else {
-      setBgImageUrl("");
-      window.localStorage.removeItem("kb_bg_image_url");
-    }
     setBgOverlay(Number.isFinite(savedOverlay) ? Math.min(90, Math.max(0, savedOverlay)) : 55);
+
+    // Fetch the authoritative background URL from storage so it works across devices.
+    fetch("/api/background")
+      .then((r) => r.json())
+      .then((data: { url: string | null }) => {
+        const url = data.url ?? "";
+        if (url && url.startsWith("http")) {
+          setBgImageUrl(url);
+          window.localStorage.setItem("kb_bg_image_url", url);
+        } else {
+          setBgImageUrl("");
+          window.localStorage.removeItem("kb_bg_image_url");
+        }
+      })
+      .catch(() => {
+        // Fall back to localStorage if the API is unreachable.
+        const savedUrl = window.localStorage.getItem("kb_bg_image_url") ?? "";
+        if (savedUrl && savedUrl.startsWith("http")) {
+          setBgImageUrl(savedUrl);
+        } else {
+          setBgImageUrl("");
+          window.localStorage.removeItem("kb_bg_image_url");
+        }
+      });
   }, []);
 
   useEffect(() => {
@@ -1151,21 +1168,98 @@ export default function KanbanBoard() {
       </div>
 
       {showSettings && showBackgroundPanel ? (
-        <section style={{ ...panelStyle, display: "flex", flexDirection: "column", gap: 10 }}>
+        <section style={{ ...panelStyle, display: "flex", flexDirection: "column", gap: 12 }}>
           <h2 style={panelHeading}>Background Style</h2>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-            <input
-              value={bgImageUrl}
-              onChange={(e) => setBgImageUrl(e.target.value)}
-              placeholder="Image URL (optional — leave blank for gradient)"
-              style={{ ...fieldStyle, flex: "3 1 240px" }}
-            />
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "2 1 180px" }}>
+
+          {/* Upload row */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <label
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                background: "#0079BF",
+                color: "#fff",
+                border: "none",
+                borderRadius: 6,
+                padding: "7px 14px",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: bgUploading ? "not-allowed" : "pointer",
+                opacity: bgUploading ? 0.6 : 1,
+                transition: "opacity 0.15s",
+              }}
+            >
+              {bgUploading ? "Uploading…" : "Choose Image"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                style={{ display: "none" }}
+                disabled={bgUploading}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  e.target.value = "";
+                  setBgUploading(true);
+                  try {
+                    const form = new FormData();
+                    form.append("file", file);
+                    const res = await fetch("/api/background", { method: "POST", body: form });
+                    const data = await res.json() as { url?: string; error?: string };
+                    if (!res.ok || !data.url) throw new Error(data.error ?? "Upload failed");
+                    setBgImageUrl(data.url);
+                    window.localStorage.setItem("kb_bg_image_url", data.url);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Upload failed");
+                  } finally {
+                    setBgUploading(false);
+                  }
+                }}
+              />
+            </label>
+
+            {bgImageUrl && (
+              <button
+                onClick={async () => {
+                  try {
+                    await fetch("/api/background", { method: "DELETE" });
+                  } catch { /* best-effort */ }
+                  setBgImageUrl("");
+                  window.localStorage.removeItem("kb_bg_image_url");
+                }}
+                style={{
+                  background: "rgba(235,90,70,0.12)",
+                  border: "1px solid #FFBDAD",
+                  borderRadius: 6,
+                  color: "#BF2600",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  padding: "7px 14px",
+                  cursor: "pointer",
+                }}
+              >
+                Remove Background
+              </button>
+            )}
+
+            {bgImageUrl && (
+              <span style={{ fontSize: 12, color: "#5E6C84", fontStyle: "italic", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 200 }}>
+                ✓ Image uploaded
+              </span>
+            )}
+          </div>
+
+          {/* Overlay slider — only shown when an image is active */}
+          {bgImageUrl && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <label style={{ fontSize: 13, color: "#5E6C84", whiteSpace: "nowrap" }}>Overlay {bgOverlay}%</label>
               <input type="range" min={0} max={90} value={bgOverlay} onChange={(e) => setBgOverlay(Number(e.target.value))} style={{ flex: 1 }} />
             </div>
-          </div>
-          <p style={{ fontSize: 12, color: "#7A869A", margin: 0 }}>Tip: set a hosted image URL. Leave blank to use the default gradient background.</p>
+          )}
+
+          <p style={{ fontSize: 12, color: "#7A869A", margin: 0 }}>
+            Upload a JPG, PNG, WebP, or GIF. Leave empty to use the default gradient.
+          </p>
         </section>
       ) : null}
 
