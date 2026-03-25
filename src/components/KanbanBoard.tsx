@@ -1214,13 +1214,30 @@ export default function KanbanBoard() {
                   }
                   setBgUploading(true);
                   try {
-                    const form = new FormData();
-                    form.append("file", file);
-                    const res = await fetch("/api/background", { method: "POST", body: form });
-                    const data = await res.json() as { url?: string; error?: string };
-                    if (!res.ok || !data.url) throw new Error(data.error ?? "Upload failed");
-                    setBgImageUrl(data.url);
-                    window.localStorage.setItem("kb_bg_image_url", data.url);
+                    let finalUrl: string;
+                    if (file.size > 4 * 1024 * 1024) {
+                      // Large file: go directly to Supabase via presigned URL to bypass Vercel's 4.5 MB limit.
+                      const presignRes = await fetch("/api/background/presign", { method: "POST" });
+                      const presignData = await presignRes.json() as { signedUrl?: string; publicUrl?: string; error?: string };
+                      if (!presignRes.ok || !presignData.signedUrl) throw new Error(presignData.error ?? "Failed to get upload URL");
+                      const putRes = await fetch(presignData.signedUrl, {
+                        method: "PUT",
+                        headers: { "Content-Type": file.type || "application/octet-stream" },
+                        body: file,
+                      });
+                      if (!putRes.ok) throw new Error(`Direct upload failed (${putRes.status})`);
+                      finalUrl = presignData.publicUrl!;
+                    } else {
+                      // Small file: upload through the Next.js API route.
+                      const form = new FormData();
+                      form.append("file", file);
+                      const res = await fetch("/api/background", { method: "POST", body: form });
+                      const data = await res.json() as { url?: string; error?: string };
+                      if (!res.ok || !data.url) throw new Error(data.error ?? "Upload failed");
+                      finalUrl = data.url;
+                    }
+                    setBgImageUrl(finalUrl);
+                    window.localStorage.setItem("kb_bg_image_url", finalUrl);
                   } catch (err) {
                     setError(err instanceof Error ? err.message : "Upload failed");
                   } finally {
