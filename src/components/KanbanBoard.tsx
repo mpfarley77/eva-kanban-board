@@ -1120,9 +1120,8 @@ export default function KanbanBoard() {
             {COLUMNS.map((col) => (
               <div
                 key={col.key}
+                className="kb-col"
                 style={{
-                  width: 280,
-                  flexShrink: 0,
                   background: HEADER_COLORS[col.key],
                   borderRadius: "12px 12px 0 0",
                   padding: "10px 12px",
@@ -1139,7 +1138,7 @@ export default function KanbanBoard() {
           </div>
         </div>
 
-        <div ref={bodiesScrollRef} style={{ display: "flex", gap: 14, overflowX: "auto", paddingBottom: 16 }}>
+        <div ref={bodiesScrollRef} className="kb-bodies-row" style={{ display: "flex", gap: 14 }}>
         {COLUMNS.map((col) => (
           <KanbanColumn
             key={col.key}

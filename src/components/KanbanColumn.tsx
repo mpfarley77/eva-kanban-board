@@ -74,9 +74,8 @@ export default function KanbanColumn({
 
   return (
     <div
+      className="kb-col"
       style={{
-        width: 280,
-        flexShrink: 0,
         borderRadius: noHeader ? "0 0 12px 12px" : 12,
         background: isDropTarget
           ? "rgba(179, 212, 255, 0.55)"

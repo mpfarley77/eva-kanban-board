@@ -39,3 +39,30 @@ body {
   from { opacity: 0; transform: translateX(-50%) translateY(10px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
+
+/* ── Responsive kanban column layout ─────────────────────────────────────── */
+/* Mobile / narrow tablet: fixed 280px columns with horizontal scroll        */
+.kb-col {
+  width: 280px;
+  flex-shrink: 0;
+}
+
+/* Column bodies row: scrollable on mobile, clipped on desktop               */
+.kb-bodies-row {
+  overflow-x: auto;
+  padding-bottom: 16px;
+}
+
+/* Desktop / wide tablet: columns stretch to fill the full board width       */
+@media (min-width: 1024px) {
+  .kb-col {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  .kb-bodies-row {
+    overflow-x: hidden;
+  }
+}
