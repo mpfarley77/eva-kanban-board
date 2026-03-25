@@ -895,7 +895,9 @@ export default function KanbanBoard() {
       : "linear-gradient(135deg, #0062E6 0%, #33A1FD 30%, #59C3C3 60%, #7BCB72 100%)",
     backgroundSize: "cover",
     backgroundPosition: "center",
-    backgroundAttachment: "fixed",
+    // Use "scroll" for custom images so GIFs animate correctly — "fixed" forces browsers
+    // to rasterize the background at paint time, which freezes animated GIFs.
+    backgroundAttachment: bgImageUrl ? "scroll" : "fixed",
   };
 
   return (
@@ -950,10 +952,16 @@ export default function KanbanBoard() {
             display: "flex",
             flexDirection: "column",
             gap: 16,
-            backgroundImage: shellStyle.backgroundImage,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            backgroundAttachment: "fixed",
+            // When a custom image is active the main background uses "scroll", so we can't
+            // mirror it with background-attachment:fixed. Use a frosted-glass backdrop instead.
+            ...(bgImageUrl
+              ? { backdropFilter: "blur(0px)", background: "transparent" }
+              : {
+                  backgroundImage: shellStyle.backgroundImage,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  backgroundAttachment: "fixed",
+                }),
           }}
         >
           <section style={{ ...panelStyle, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1200,6 +1208,10 @@ export default function KanbanBoard() {
                   const file = e.target.files?.[0];
                   if (!file) return;
                   e.target.value = "";
+                  if (file.size > 10 * 1024 * 1024) {
+                    setError("Image must be 10 MB or smaller.");
+                    return;
+                  }
                   setBgUploading(true);
                   try {
                     const form = new FormData();

@@ -39,6 +39,9 @@ export async function POST(req: NextRequest) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
+  if (buffer.byteLength > 10 * 1024 * 1024) {
+    return NextResponse.json({ error: "File exceeds 10 MB limit" }, { status: 413 });
+  }
   const contentType = file.type || "image/jpeg";
 
   const { error } = await supabase.storage
