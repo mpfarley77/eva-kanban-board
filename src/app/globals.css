@@ -1,26 +1,41 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Typography */
+  --font-sans: var(--font-nunito-sans);
+
+  /* Surfaces */
+  --color-card-bg: #ffffff;
+  --color-column-bg: rgba(235, 236, 240, 0.95);
+  --color-card-title: #172b4d;
+  --color-card-meta: #5e6c84;
+
+  /* Column header colors */
+  --color-col-backlog: #0079bf;
+  --color-col-in-progress: #d29034;
+  --color-col-review: #89609e;
+  --color-col-completed: #519839;
+
+  /* Priority colors */
+  --color-priority-p0: #eb5a46;
+  --color-priority-p1: #cf9f02;
+  --color-priority-p2: #61bd4f;
+  --color-priority-p3: #c377e0;
+
+  /* Default background gradient */
+  --gradient-default: linear-gradient(135deg, #0062e6 0%, #33a1fd 30%, #59c3c3 60%, #7bcb72 100%);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-nunito-sans);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-nunito-sans), "Nunito Sans", sans-serif;
+  margin: 0;
+}
+
+@keyframes toast-slide-up {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }

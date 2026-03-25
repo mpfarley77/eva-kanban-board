@@ -1,0 +1,15 @@
+{
+  "name": "Personal Kanban Board",
+  "short_name": "Kanban",
+  "description": "Secure personal Kanban board for daily work management.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "portrait",
+  "scope": "/",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f172a",
+  "lang": "en",
+  "orientation": "portrait-primary"
+}

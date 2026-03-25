@@ -11,7 +11,7 @@ import {
   COLUMNS,
 } from "./types";
 import FilterBar from "./FilterBar";
-import KanbanColumn from "./KanbanColumn";
+import KanbanColumn, { HEADER_COLORS } from "./KanbanColumn";
 import TopBar from "./TopBar";
 import Toast from "./Toast";
 
@@ -47,12 +47,34 @@ export default function KanbanBoard() {
   const [localProjects, setLocalProjects] = useState<string[]>([]);
   const [showAddTaskNewProject, setShowAddTaskNewProject] = useState(false);
   const [newProjectDraft, setNewProjectDraft] = useState("");
-  const [showSettings, setShowSettings] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
   // Keyed by taskId — stores the status a task had before being auto-moved to Blocked.
   // Kept in local state only; not persisted to DB since the column doesn't exist yet.
   const [preBlockStatuses, setPreBlockStatuses] = useState<Record<string, Status>>({});
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stickyBlockRef = useRef<HTMLDivElement>(null);
+  const headersScrollRef = useRef<HTMLDivElement>(null);
+  const bodiesScrollRef = useRef<HTMLDivElement>(null);
+  const [stickyBlockHeight, setStickyBlockHeight] = useState(200);
+
+  useEffect(() => {
+    const el = stickyBlockRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setStickyBlockHeight(el.offsetHeight));
+    ro.observe(el);
+    setStickyBlockHeight(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const headers = headersScrollRef.current;
+    const bodies = bodiesScrollRef.current;
+    if (!headers || !bodies) return;
+    const onBodiesScroll = () => { headers.scrollLeft = bodies.scrollLeft; };
+    bodies.addEventListener("scroll", onBodiesScroll);
+    return () => bodies.removeEventListener("scroll", onBodiesScroll);
+  }, []);
 
   const showToast = (message: string) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -514,9 +536,38 @@ export default function KanbanBoard() {
 
   const setRiskForTask = async (taskId: string, risk: NonNullable<Task["risk_state"]>) => {
     const previous = tasks;
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, risk_state: risk } : t)));
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    const patch: Record<string, unknown> = { risk_state: risk };
+    let nextStatus: Status | undefined;
+
+    if (risk === "blocked" && task.status !== "blocked") {
+      // Only save pre-block status if blocked_reason hasn't already saved it.
+      if (!preBlockStatuses[taskId]) {
+        setPreBlockStatuses((prev) => ({ ...prev, [taskId]: task.status }));
+      }
+      nextStatus = "blocked";
+      patch.status = "blocked";
+    } else if (risk !== "blocked" && task.status === "blocked") {
+      // Only restore if the blocked_reason isn't also holding the task in Blocked.
+      if (!(task.blocked_reason ?? "").trim()) {
+        const restored = preBlockStatuses[taskId] ?? "backlog";
+        setPreBlockStatuses((prev) => { const next = { ...prev }; delete next[taskId]; return next; });
+        nextStatus = restored;
+        patch.status = restored;
+      }
+    }
+
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId
+          ? { ...t, risk_state: risk, ...(nextStatus !== undefined ? { status: nextStatus } : {}) }
+          : t
+      )
+    );
     try {
-      await patchTask(taskId, { risk_state: risk });
+      await patchTask(taskId, patch);
     } catch (e: unknown) {
       setTasks(previous);
       setError(e instanceof Error ? e.message : "Task update failed");
@@ -827,7 +878,7 @@ export default function KanbanBoard() {
   };
 
   return (
-    <main style={{ ...shellStyle, height: "100vh", display: "flex", flexDirection: "column" }} className="text-white">
+    <main style={shellStyle} className="min-h-screen text-white">
       <TopBar
         updatedAt={updatedAt}
         onRefresh={loadTasks}
@@ -840,7 +891,7 @@ export default function KanbanBoard() {
         onClearCompleted={() => void clearCompletedTasks()}
         onLogout={async () => { await fetch("/api/logout", { method: "POST" }); window.location.href = "/login"; }}
       />
-      <div className="p-3 sm:p-4 md:p-6 space-y-4 md:space-y-5" style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", paddingTop: 64 }}>
+      <div className="p-3 sm:p-4 md:p-6 space-y-4 md:space-y-5">
 
       {showSettings && showShortcutsHelp ? (
         <section style={panelStyle}>
@@ -868,7 +919,23 @@ export default function KanbanBoard() {
         </section>
       ) : null}
 
-      <section style={{ ...panelStyle, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div>
+        <div
+          ref={stickyBlockRef}
+          style={{
+            position: "sticky",
+            top: 64,
+            zIndex: 40,
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+            backgroundImage: shellStyle.backgroundImage,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundAttachment: "fixed",
+          }}
+        >
+          <section style={{ ...panelStyle, display: "flex", flexDirection: "column", gap: 12 }}>
         <h2 style={panelHeading}>Add Task</h2>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <input
@@ -1018,34 +1085,37 @@ export default function KanbanBoard() {
         ) : null}
         {error ? <p style={{ fontSize: 13, color: "#BF2600", margin: 0 }}>{error}</p> : null}
         </>}
-      </section>
-
-      {showSettings && showBackgroundPanel ? (
-        <section style={{ ...panelStyle, display: "flex", flexDirection: "column", gap: 10 }}>
-          <h2 style={panelHeading}>Background Style</h2>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-            <input
-              value={bgImageUrl}
-              onChange={(e) => setBgImageUrl(e.target.value)}
-              placeholder="Image URL (optional — leave blank for gradient)"
-              style={{ ...fieldStyle, flex: "3 1 240px" }}
-            />
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "2 1 180px" }}>
-              <label style={{ fontSize: 13, color: "#5E6C84", whiteSpace: "nowrap" }}>Overlay {bgOverlay}%</label>
-              <input type="range" min={0} max={90} value={bgOverlay} onChange={(e) => setBgOverlay(Number(e.target.value))} style={{ flex: 1 }} />
-            </div>
+          </section>
+          {/* Sticky column headers row */}
+          <div ref={headersScrollRef} style={{ display: "flex", gap: 14, overflowX: "hidden" }}>
+            {COLUMNS.map((col) => (
+              <div
+                key={col.key}
+                style={{
+                  width: 280,
+                  flexShrink: 0,
+                  background: HEADER_COLORS[col.key],
+                  borderRadius: "12px 12px 0 0",
+                  padding: "10px 12px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#fff", textTransform: "uppercase", letterSpacing: "0.5px" }}>{col.label}</span>
+                <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(255,255,255,0.3)", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{grouped[col.key].length}</span>
+              </div>
+            ))}
           </div>
-          <p style={{ fontSize: 12, color: "#7A869A", margin: 0 }}>Tip: set a hosted image URL. Leave blank to use the default gradient background.</p>
-        </section>
-      ) : null}
+        </div>
 
-
-      {loading ? <p style={{ fontSize: 13, color: "#5E6C84" }}>Loading tasks…</p> : null}
-
-      <section className="flex gap-[14px] overflow-x-auto overflow-y-auto pb-4 items-start flex-1 min-h-0">
+        <div ref={bodiesScrollRef} style={{ display: "flex", gap: 14, overflowX: "auto", paddingBottom: 16 }}>
         {COLUMNS.map((col) => (
           <KanbanColumn
             key={col.key}
+            noHeader
+            bodyMinHeight={`calc(100vh - 64px - ${stickyBlockHeight}px)`}
             label={col.label}
             colKey={col.key}
             tasks={grouped[col.key]}
@@ -1073,7 +1143,30 @@ export default function KanbanBoard() {
             onDelete={(taskId) => deleteTask(taskId)}
           />
         ))}
-      </section>
+        </div>
+      </div>
+
+      {showSettings && showBackgroundPanel ? (
+        <section style={{ ...panelStyle, display: "flex", flexDirection: "column", gap: 10 }}>
+          <h2 style={panelHeading}>Background Style</h2>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+            <input
+              value={bgImageUrl}
+              onChange={(e) => setBgImageUrl(e.target.value)}
+              placeholder="Image URL (optional — leave blank for gradient)"
+              style={{ ...fieldStyle, flex: "3 1 240px" }}
+            />
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "2 1 180px" }}>
+              <label style={{ fontSize: 13, color: "#5E6C84", whiteSpace: "nowrap" }}>Overlay {bgOverlay}%</label>
+              <input type="range" min={0} max={90} value={bgOverlay} onChange={(e) => setBgOverlay(Number(e.target.value))} style={{ flex: 1 }} />
+            </div>
+          </div>
+          <p style={{ fontSize: 12, color: "#7A869A", margin: 0 }}>Tip: set a hosted image URL. Leave blank to use the default gradient background.</p>
+        </section>
+      ) : null}
+
+      {loading ? <p style={{ fontSize: 13, color: "#5E6C84" }}>Loading tasks…</p> : null}
+
       </div>
       {toast && <Toast message={toast} />}
     </main>

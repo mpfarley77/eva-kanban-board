@@ -32,8 +32,6 @@ type Props = {
   onConfirmDeleteChange: (v: boolean) => void;
   showRelativeTimes: boolean;
   onShowRelativeTimesChange: (v: boolean) => void;
-  showActivityPanel: boolean;
-  onShowActivityPanelChange: (v: boolean) => void;
   compactCards: boolean;
   onCompactCardsChange: (v: boolean) => void;
   showBackgroundPanel: boolean;
@@ -46,6 +44,72 @@ type Props = {
   totalCount: number;
   riskSummary: RiskSummary;
 };
+
+// ─── Style tokens ─────────────────────────────────────────────────────────────
+
+const ctrl: React.CSSProperties = {
+  background: "#FAFBFC",
+  border: "1px solid #DFE1E6",
+  borderRadius: 4,
+  color: "#172B4D",
+  fontSize: 13,
+  padding: "4px 8px",
+  height: 32,
+};
+
+const lbl: React.CSSProperties = {
+  fontSize: 13,
+  color: "#5E6C84",
+  whiteSpace: "nowrap",
+};
+
+const clearBtn: React.CSSProperties = {
+  background: "#F4F5F7",
+  border: "1px solid #DFE1E6",
+  borderRadius: 4,
+  color: "#5E6C84",
+  fontSize: 12,
+  padding: "4px 10px",
+  cursor: "pointer",
+  height: 32,
+};
+
+type PillStyle = { bg: string; text: string; border: string };
+
+const PILLS: Record<string, PillStyle> = {
+  atRisk:          { bg: "#FFEBE6", text: "#BF2600", border: "#FFBDAD" },
+  normal:          { bg: "#EEF6EC", text: "#519839", border: "#ABE2A8" },
+  watch:           { bg: "#FFFAE6", text: "#974F0C", border: "#FFE380" },
+  dueSoon:         { bg: "#E6F0FF", text: "#0052CC", border: "#B3D4FF" },
+  blocked:         { bg: "#EAE6FF", text: "#403294", border: "#C0B6F2" },
+  staleInProgress: { bg: "#FFF3E0", text: "#BF360C", border: "#FFD5B1" },
+  clear:           { bg: "#F4F5F7", text: "#5E6C84", border: "#DFE1E6" },
+};
+
+function pill(key: string, label: string, onClick: () => void) {
+  const s = PILLS[key];
+  return (
+    <button
+      key={key}
+      onClick={onClick}
+      style={{
+        background: s.bg,
+        color: s.text,
+        border: `1px solid ${s.border}`,
+        borderRadius: 20,
+        fontSize: 12,
+        fontWeight: 600,
+        padding: "3px 10px",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function FilterBar({
   searchQuery,
@@ -64,8 +128,6 @@ export default function FilterBar({
   onConfirmDeleteChange,
   showRelativeTimes,
   onShowRelativeTimesChange,
-  showActivityPanel,
-  onShowActivityPanelChange,
   compactCards,
   onCompactCardsChange,
   showBackgroundPanel,
@@ -80,50 +142,35 @@ export default function FilterBar({
 }: Props) {
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2 text-sm">
+      {/* ── Filter controls row ── */}
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
         <input
           ref={searchInputRef}
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search title/project/blocker (press /)"
-          className="min-h-9 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
+          style={{ ...ctrl, width: 260 }}
         />
-        {searchQuery ? (
-          <button
-            className="rounded border border-slate-700 px-2 py-1 text-xs hover:bg-slate-800"
-            onClick={() => {
-              onSearchChange("");
-              searchInputRef.current?.focus();
-            }}
-          >
+        {searchQuery && (
+          <button style={clearBtn} onClick={() => { onSearchChange(""); searchInputRef.current?.focus(); }}>
             Clear search
           </button>
-        ) : null}
+        )}
 
-        <label className="text-slate-400">Project view</label>
-        <select value={projectFilter} onChange={(e) => onProjectFilterChange(e.target.value)} className="rounded border border-slate-700 bg-slate-950 px-2 py-1">
+        <span style={lbl}>Project</span>
+        <select value={projectFilter} onChange={(e) => onProjectFilterChange(e.target.value)} style={ctrl}>
           <option value="all">All projects</option>
           {projectOptions.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
 
-        <label className="ml-0 sm:ml-3 text-slate-400">Objective</label>
-        <select
-          value={objectiveFilter}
-          onChange={(e) => onObjectiveFilterChange(e.target.value as Objective | "all")}
-          className="rounded border border-slate-700 bg-slate-950 px-2 py-1"
-        >
+        <span style={lbl}>Objective</span>
+        <select value={objectiveFilter} onChange={(e) => onObjectiveFilterChange(e.target.value as Objective | "all")} style={ctrl}>
           <option value="all">All objectives</option>
-          {OBJECTIVES.map((o) => (
-            <option key={o.key} value={o.key}>{o.label}</option>
-          ))}
+          {OBJECTIVES.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
         </select>
 
-        <label className="ml-0 sm:ml-3 text-slate-400">Risk</label>
-        <select
-          value={riskFilter}
-          onChange={(e) => onRiskFilterChange(e.target.value as RiskFilter)}
-          className="rounded border border-slate-700 bg-slate-950 px-2 py-1"
-        >
+        <span style={lbl}>Risk</span>
+        <select value={riskFilter} onChange={(e) => onRiskFilterChange(e.target.value as RiskFilter)} style={ctrl}>
           <option value="all">All risk</option>
           <option value="normal">Normal</option>
           <option value="watch">Watch</option>
@@ -131,148 +178,52 @@ export default function FilterBar({
           <option value="blocked">Blocked</option>
         </select>
 
-        <label className="ml-0 sm:ml-3 text-slate-400">Time</label>
-        <select
-          value={timeFilter}
-          onChange={(e) => onTimeFilterChange(e.target.value as TimeFilter)}
-          className="rounded border border-slate-700 bg-slate-950 px-2 py-1"
-        >
+        <span style={lbl}>Time</span>
+        <select value={timeFilter} onChange={(e) => onTimeFilterChange(e.target.value as TimeFilter)} style={ctrl}>
           <option value="all">All time</option>
           <option value="due_24h">Due &lt; 24h</option>
           <option value="stale_in_progress">Stale in-progress</option>
         </select>
 
-        <button
-          className="rounded border border-slate-700 px-2 py-1 text-xs hover:bg-slate-800"
-          onClick={() => {
-            onProjectFilterChange("all");
-            onObjectiveFilterChange("all");
-            onRiskFilterChange("all");
-            onTimeFilterChange("all");
-            onSearchChange("");
-          }}
-        >
+        <button style={clearBtn} onClick={() => { onProjectFilterChange("all"); onObjectiveFilterChange("all"); onRiskFilterChange("all"); onTimeFilterChange("all"); onSearchChange(""); }}>
           Clear filters
         </button>
-
-        <label className="ml-0 sm:ml-3 flex items-center gap-2 text-slate-400 text-xs">
-          <input
-            type="checkbox"
-            checked={confirmDelete}
-            onChange={(e) => onConfirmDeleteChange(e.target.checked)}
-          />
-          Confirm delete
-        </label>
-
-        <label className="flex items-center gap-2 text-slate-400 text-xs">
-          <input
-            type="checkbox"
-            checked={showRelativeTimes}
-            onChange={(e) => onShowRelativeTimesChange(e.target.checked)}
-          />
-          Show relative times
-        </label>
-
-        <label className="flex items-center gap-2 text-slate-400 text-xs">
-          <input
-            type="checkbox"
-            checked={showActivityPanel}
-            onChange={(e) => onShowActivityPanelChange(e.target.checked)}
-          />
-          Show activity panel
-        </label>
-
-        <label className="flex items-center gap-2 text-slate-400 text-xs">
-          <input
-            type="checkbox"
-            checked={compactCards}
-            onChange={(e) => onCompactCardsChange(e.target.checked)}
-          />
-          Compact cards
-        </label>
-
-        <label className="flex items-center gap-2 text-slate-400 text-xs">
-          <input
-            type="checkbox"
-            checked={showBackgroundPanel}
-            onChange={(e) => onShowBackgroundPanelChange(e.target.checked)}
-          />
-          Show background panel
-        </label>
-
-        <label className="flex items-center gap-2 text-slate-400 text-xs">
-          <input
-            type="checkbox"
-            checked={showTopUrgentPanel}
-            onChange={(e) => onShowTopUrgentPanelChange(e.target.checked)}
-          />
-          Show top urgent panel
-        </label>
-
-        <label className="flex items-center gap-2 text-slate-400 text-xs">
-          <input
-            type="checkbox"
-            checked={showTipsPanel}
-            onChange={(e) => onShowTipsPanelChange(e.target.checked)}
-          />
-          Show tips panel
-        </label>
       </div>
-      <p className="text-xs text-slate-400">WIP limit active: max 1 task in "In Progress". Drag and drop cards between columns is enabled.</p>
-      <p className="text-xs text-slate-500">Showing {visibleCount} of {totalCount} tasks with active filters.</p>
-      <div className="flex flex-wrap gap-2 text-xs">
-        <button
-          className="rounded-full border border-red-700/60 bg-red-950/40 px-2 py-1 text-red-200 hover:bg-red-900/40"
-          onClick={() => onRiskFilterChange("at_risk")}
-        >
-          At risk: {riskSummary.atRisk}
-        </button>
-        <button
-          className="rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-1 text-amber-200 hover:bg-amber-900/40"
-          onClick={() => onRiskFilterChange("normal")}
-        >
-          Normal: {riskSummary.normal}
-        </button>
-        <button
-          className="rounded-full border border-yellow-700/60 bg-yellow-950/40 px-2 py-1 text-yellow-200 hover:bg-yellow-900/40"
-          onClick={() => onRiskFilterChange("watch")}
-        >
-          Watch: {riskSummary.watch}
-        </button>
-        <button
-          className="rounded-full border border-sky-700/60 bg-sky-950/40 px-2 py-1 text-sky-200 hover:bg-sky-900/40"
-          onClick={() => onTimeFilterChange("due_24h")}
-        >
-          Due &lt; 24h: {riskSummary.dueSoon}
-        </button>
-        <button
-          className="rounded-full border border-purple-700/60 bg-purple-950/40 px-2 py-1 text-purple-200 hover:bg-purple-900/40"
-          onClick={() => onRiskFilterChange("blocked")}
-        >
-          Blocked: {riskSummary.blocked}
-        </button>
-        <button
-          className="rounded-full border border-orange-700/60 bg-orange-950/40 px-2 py-1 text-orange-200 hover:bg-orange-900/40"
-          onClick={() => onTimeFilterChange("stale_in_progress")}
-        >
-          Stale in-progress (&gt;48h): {riskSummary.staleInProgress}
-        </button>
-        {riskFilter !== "all" ? (
-          <button
-            className="rounded-full border border-slate-600 px-2 py-1 text-slate-300 hover:bg-slate-800"
-            onClick={() => onRiskFilterChange("all")}
-          >
-            Clear risk filter
-          </button>
-        ) : null}
-        {timeFilter !== "all" ? (
-          <button
-            className="rounded-full border border-slate-600 px-2 py-1 text-slate-300 hover:bg-slate-800"
-            onClick={() => onTimeFilterChange("all")}
-          >
-            Clear time filter
-          </button>
-        ) : null}
+
+      {/* ── Display toggles ── */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+        {(
+          [
+            { checked: confirmDelete,       onChange: onConfirmDeleteChange,       label: "Confirm delete" },
+            { checked: showRelativeTimes,   onChange: onShowRelativeTimesChange,   label: "Relative times" },
+            { checked: compactCards,        onChange: onCompactCardsChange,        label: "Compact cards" },
+            { checked: showBackgroundPanel, onChange: onShowBackgroundPanelChange, label: "Background panel" },
+            { checked: showTopUrgentPanel,  onChange: onShowTopUrgentPanelChange,  label: "Top urgent" },
+            { checked: showTipsPanel,       onChange: onShowTipsPanelChange,       label: "Tips" },
+          ] satisfies { checked: boolean; onChange: (v: boolean) => void; label: string }[]
+        ).map(({ checked, onChange, label }) => (
+          <label key={label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#5E6C84", cursor: "pointer" }}>
+            <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+            {label}
+          </label>
+        ))}
+      </div>
+
+      {/* ── Info lines ── */}
+      <p style={{ fontSize: 12, color: "#7A869A", margin: 0 }}>
+        Showing {visibleCount} of {totalCount} tasks with active filters.
+      </p>
+
+      {/* ── Risk summary pills ── */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {pill("atRisk",          `At risk: ${riskSummary.atRisk}`,                   () => onRiskFilterChange("at_risk"))}
+        {pill("normal",          `Normal: ${riskSummary.normal}`,                    () => onRiskFilterChange("normal"))}
+        {pill("watch",           `Watch: ${riskSummary.watch}`,                      () => onRiskFilterChange("watch"))}
+        {pill("dueSoon",         `Due < 24h: ${riskSummary.dueSoon}`,               () => onTimeFilterChange("due_24h"))}
+        {pill("blocked",         `Blocked: ${riskSummary.blocked}`,                  () => onRiskFilterChange("blocked"))}
+        {pill("staleInProgress", `Stale >48h: ${riskSummary.staleInProgress}`,      () => onTimeFilterChange("stale_in_progress"))}
+        {riskFilter !== "all"  && pill("clear", "Clear risk filter",  () => onRiskFilterChange("all"))}
+        {timeFilter !== "all"  && pill("clear", "Clear time filter",  () => onTimeFilterChange("all"))}
       </div>
     </>
   );

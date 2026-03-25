@@ -31,7 +31,7 @@ export default function TopBar({
 }: Props) {
   return (
     <header
-      className="fixed top-0 z-50 w-full flex items-center justify-between gap-4 px-5 py-3 backdrop-blur"
+      className="sticky top-0 z-50 flex items-center justify-between gap-4 px-5 py-3 backdrop-blur"
       style={{ background: "rgba(0,0,0,0.25)" }}
     >
       <div>

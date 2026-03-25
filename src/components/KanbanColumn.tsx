@@ -3,7 +3,7 @@
 import { type Status, type Priority, type Task } from "./types";
 import TaskCard from "./TaskCard";
 
-const HEADER_COLORS: Record<Status, string> = {
+export const HEADER_COLORS: Record<Status, string> = {
   backlog:     "#0079BF",
   in_progress: "#D29034",
   review:      "#89609E",
@@ -37,6 +37,8 @@ type Props = {
   onReorderUp: (taskId: string) => void;
   onReorderDown: (taskId: string) => void;
   onDelete: (taskId: string) => void;
+  noHeader?: boolean;
+  bodyMinHeight?: string;
 };
 
 export default function KanbanColumn({
@@ -65,6 +67,8 @@ export default function KanbanColumn({
   onReorderUp,
   onReorderDown,
   onDelete,
+  noHeader,
+  bodyMinHeight,
 }: Props) {
   const headerColor = HEADER_COLORS[colKey];
 
@@ -73,11 +77,12 @@ export default function KanbanColumn({
       style={{
         width: 280,
         flexShrink: 0,
-        borderRadius: 12,
+        borderRadius: noHeader ? "0 0 12px 12px" : 12,
         background: isDropTarget
           ? "rgba(179, 212, 255, 0.55)"
           : "rgba(235, 236, 240, 0.95)",
         transition: "background 0.15s",
+        minHeight: bodyMinHeight,
       }}
       onDragOver={(e) => { e.preventDefault(); onDragOver(); }}
       onDragLeave={(e) => {
@@ -92,51 +97,50 @@ export default function KanbanColumn({
       }}
     >
       {/* Column header */}
-      <div
-        style={{
-          background: headerColor,
-          borderRadius: "12px 12px 0 0",
-          padding: "10px 12px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 8,
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
-        }}
-      >
-        <span
+      {!noHeader && (
+        <div
           style={{
-            fontSize: 14,
-            fontWeight: 700,
-            color: "#fff",
-            textTransform: "uppercase",
-            letterSpacing: "0.5px",
+            background: headerColor,
+            borderRadius: "12px 12px 0 0",
+            padding: "10px 12px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
           }}
         >
-          {label}
-        </span>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span
             style={{
-              width: 22,
-              height: 22,
-              borderRadius: "50%",
-              background: "rgba(255,255,255,0.3)",
-              color: "#fff",
-              fontSize: 11,
+              fontSize: 14,
               fontWeight: 700,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
+              color: "#fff",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
             }}
           >
-            {tasks.length}
+            {label}
           </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: "50%",
+                background: "rgba(255,255,255,0.3)",
+                color: "#fff",
+                fontSize: 11,
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              {tasks.length}
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Column body */}
       <div style={{ padding: "10px 8px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
