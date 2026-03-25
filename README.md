@@ -42,6 +42,13 @@ Open `http://localhost:3000`.
    - `KB_AUTOMATION_TOKEN` (for seed/rebucket automation endpoints)
 4. Deploy.
 
+Tip: copy `.env.example` when setting up local development so auth + Supabase variables stay in sync.
+Tip: the app now includes a basic `manifest.webmanifest` for installability-focused deployments.
+Tip: the app now ships with `manifest.webmanifest` + Apple web app metadata for a cleaner installable/mobile experience.
+Tip: the app now includes `manifest.webmanifest` + Apple web app metadata for a more installable mobile experience.
+
+PWA note: a basic `manifest.webmanifest` is included so the board can present as an installable web app shell.
+
 ## Notes
 
 - Test validation checklist: `TEST-CHECKLIST.md`
@@ -50,6 +57,8 @@ Open `http://localhost:3000`.
 - Includes optional board background image + overlay customization (saved in localStorage).
 - Includes task duplication, filtered JSON/CSV export, clipboard-ready board summary (with TXT fallback), clear-completed bulk cleanup, and optional delete confirmation guardrail.
 - Includes optional relative-time labels, stale in-progress (>48h) visual warnings, and activity-panel visibility toggle for focus-friendly card scanning.
+- Activity Snapshot now shows active filter chips (search/project/objective/risk/time) plus a clear "No active filters" state.
+- Activity Snapshot now reflects active filter chips and clearly shows when no filters are applied.
 - Includes keyboard shortcuts for faster flow (`/` search focus, `Esc` clear search, `n` new-task title focus).
 - Add Task form draft is persisted locally (title/project/objective/priority).
 - Owner-scoped API authorization is now enforced in task + automation routes.

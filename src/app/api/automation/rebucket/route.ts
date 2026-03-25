@@ -5,7 +5,7 @@ const OWNER = "Eva";
 
 type Task = {
   id: string;
-  status: "backlog" | "in_progress" | "review" | "completed";
+  status: "backlog" | "in_progress" | "review" | "blocked" | "completed";
   priority: "P0" | "P1" | "P2" | "P3";
   updated_at: string;
 };
@@ -41,7 +41,8 @@ export async function GET(req: NextRequest) {
     in_progress: 0,
     review: 1,
     backlog: 2,
-    completed: 3,
+    blocked: 3,
+    completed: 4,
   };
 
   const active = [...candidates].sort((a, b) => {

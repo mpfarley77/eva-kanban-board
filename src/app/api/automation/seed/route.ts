@@ -3,10 +3,11 @@ import { getSupabase } from "@/lib/supabase";
 
 const OWNER = "Eva";
 
-const TASKS: { title: string; objective: "skyworks" | "personal" | "side_hustles"; status: "backlog" | "in_progress" | "completed" }[] = [
-  { title: "Implement project assignment field per task", objective: "skyworks", status: "in_progress" },
+// Keep exactly one seeded in_progress task to align with board WIP limit behavior.
+const TASKS: { title: string; objective: "skyworks" | "personal" | "side_hustles"; status: "backlog" | "in_progress" | "review" | "blocked" | "completed" }[] = [
+  { title: "Implement project assignment field per task", objective: "skyworks", status: "review" },
   { title: "Add project filter (single-project view)", objective: "skyworks", status: "backlog" },
-  { title: "Refine mobile UX spacing and touch targets", objective: "personal", status: "in_progress" },
+  { title: "Refine mobile UX spacing and touch targets", objective: "personal", status: "backlog" },
   { title: "Add configurable background image + overlay controls", objective: "personal", status: "backlog" },
   { title: "Evaluate additional workflow stage utility (optional)", objective: "side_hustles", status: "backlog" },
   { title: "Add drag-and-drop column movement", objective: "skyworks", status: "backlog" },

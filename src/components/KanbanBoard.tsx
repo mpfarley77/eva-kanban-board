@@ -1,48 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-
-type Objective = "skyworks" | "personal" | "side_hustles";
-type Status = "backlog" | "in_progress" | "review" | "completed";
-type Priority = "P0" | "P1" | "P2" | "P3";
-
-type Task = {
-  id: string;
-  title: string;
-  project?: string | null;
-  objective: Objective;
-  status: Status;
-  priority: Priority;
-  sort_order: number;
-  owner?: string;
-  started_at?: string | null;
-  eta?: string | null;
-  blocked_reason?: string | null;
-  risk_state?: "normal" | "watch" | "at_risk" | "blocked";
-  created_at: string;
-  updated_at: string;
-};
-
-type ActivityEvent = {
-  message: string;
-  at: string;
-};
-
-const OBJECTIVES: { key: Objective; label: string; color: string }[] = [
-  { key: "skyworks", label: "Skyworks", color: "bg-blue-500" },
-  { key: "personal", label: "Personal", color: "bg-green-500" },
-  { key: "side_hustles", label: "Side Hustles", color: "bg-purple-500" },
-];
-
-const PRIORITIES: Priority[] = ["P0", "P1", "P2", "P3"];
-const RISK_STATES: Array<NonNullable<Task["risk_state"]>> = ["normal", "watch", "at_risk", "blocked"];
-
-const COLUMNS: { key: Status; label: string }[] = [
-  { key: "backlog", label: "Backlog" },
-  { key: "in_progress", label: "In Progress" },
-  { key: "review", label: "Review" },
-  { key: "completed", label: "Completed" },
-];
+import {
+  type Objective,
+  type Status,
+  type Priority,
+  type Task,
+  OBJECTIVES,
+  PRIORITIES,
+  COLUMNS,
+} from "./types";
+import FilterBar from "./FilterBar";
+import KanbanColumn, { HEADER_COLORS } from "./KanbanColumn";
+import TopBar from "./TopBar";
+import Toast from "./Toast";
 
 export default function KanbanBoard() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -59,7 +30,6 @@ export default function KanbanBoard() {
   const [riskFilter, setRiskFilter] = useState<"all" | "normal" | "watch" | "at_risk" | "blocked">("all");
   const [timeFilter, setTimeFilter] = useState<"all" | "due_24h" | "stale_in_progress">("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const searchQueryRef = useRef("");
@@ -69,12 +39,48 @@ export default function KanbanBoard() {
   const [dropColumn, setDropColumn] = useState<Status | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(true);
   const [showRelativeTimes, setShowRelativeTimes] = useState(true);
-  const [showActivityPanel, setShowActivityPanel] = useState(true);
   const [compactCards, setCompactCards] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showTipsPanel, setShowTipsPanel] = useState(false);
   const [showBackgroundPanel, setShowBackgroundPanel] = useState(true);
   const [showTopUrgentPanel, setShowTopUrgentPanel] = useState(true);
+  const [localProjects, setLocalProjects] = useState<string[]>([]);
+  const [showAddTaskNewProject, setShowAddTaskNewProject] = useState(false);
+  const [newProjectDraft, setNewProjectDraft] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
+  // Keyed by taskId — stores the status a task had before being auto-moved to Blocked.
+  // Kept in local state only; not persisted to DB since the column doesn't exist yet.
+  const [preBlockStatuses, setPreBlockStatuses] = useState<Record<string, Status>>({});
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stickyBlockRef = useRef<HTMLDivElement>(null);
+  const headersScrollRef = useRef<HTMLDivElement>(null);
+  const bodiesScrollRef = useRef<HTMLDivElement>(null);
+  const [stickyBlockHeight, setStickyBlockHeight] = useState(200);
+
+  useEffect(() => {
+    const el = stickyBlockRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setStickyBlockHeight(el.offsetHeight));
+    ro.observe(el);
+    setStickyBlockHeight(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const headers = headersScrollRef.current;
+    const bodies = bodiesScrollRef.current;
+    if (!headers || !bodies) return;
+    const onBodiesScroll = () => { headers.scrollLeft = bodies.scrollLeft; };
+    bodies.addEventListener("scroll", onBodiesScroll);
+    return () => bodies.removeEventListener("scroll", onBodiesScroll);
+  }, []);
+
+  const showToast = (message: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast(message);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3000);
+  };
 
   const loadTasks = async () => {
     const res = await fetch("/api/tasks", { cache: "no-store" });
@@ -97,20 +103,6 @@ export default function KanbanBoard() {
       loadTasks();
     }, 30000);
     return () => clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    const raw = window.localStorage.getItem("kb_activity_v1");
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as ActivityEvent[];
-      if (Array.isArray(parsed)) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setActivity(parsed.slice(0, 40));
-      }
-    } catch {
-      // ignore malformed storage
-    }
   }, []);
 
   useEffect(() => {
@@ -138,7 +130,6 @@ export default function KanbanBoard() {
     const savedSearchQuery = window.localStorage.getItem("kb_search_query") ?? "";
     const savedConfirmDelete = window.localStorage.getItem("kb_confirm_delete") ?? "1";
     const savedRelativeTimes = window.localStorage.getItem("kb_show_relative_times") ?? "1";
-    const savedShowActivityPanel = window.localStorage.getItem("kb_show_activity_panel") ?? "1";
     const savedCompactCards = window.localStorage.getItem("kb_compact_cards") ?? "0";
     const savedShowBackgroundPanel = window.localStorage.getItem("kb_show_background_panel") ?? "1";
     const savedShowTopUrgentPanel = window.localStorage.getItem("kb_show_top_urgent_panel") ?? "1";
@@ -179,7 +170,6 @@ export default function KanbanBoard() {
     setSearchQuery(savedSearchQuery);
     setConfirmDelete(savedConfirmDelete !== "0");
     setShowRelativeTimes(savedRelativeTimes !== "0");
-    setShowActivityPanel(savedShowActivityPanel !== "0");
     setCompactCards(savedCompactCards === "1");
     setShowBackgroundPanel(savedShowBackgroundPanel !== "0");
     setShowTopUrgentPanel(savedShowTopUrgentPanel !== "0");
@@ -235,10 +225,6 @@ export default function KanbanBoard() {
   useEffect(() => {
     window.localStorage.setItem("kb_show_relative_times", showRelativeTimes ? "1" : "0");
   }, [showRelativeTimes]);
-
-  useEffect(() => {
-    window.localStorage.setItem("kb_show_activity_panel", showActivityPanel ? "1" : "0");
-  }, [showActivityPanel]);
 
   useEffect(() => {
     window.localStorage.setItem("kb_compact_cards", compactCards ? "1" : "0");
@@ -328,23 +314,23 @@ export default function KanbanBoard() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const logActivity = (message: string) => {
-    const next: ActivityEvent = {
-      message,
-      at: new Date().toISOString(),
-    };
-
-    setActivity((prev) => {
-      const updated = [next, ...prev].slice(0, 40);
-      window.localStorage.setItem("kb_activity_v1", JSON.stringify(updated));
-      return updated;
-    });
-  };
-
+  // Used by FilterBar for filtering (all tasks)
   const projectOptions = useMemo(() => {
     const names = Array.from(new Set(tasks.map((t) => (t.project ?? "").trim()).filter(Boolean)));
     return names.sort((a, b) => a.localeCompare(b));
   }, [tasks]);
+
+  // Used by Add Task form and TaskCard dropdowns (open tasks only + user-typed projects)
+  const allProjectOptions = useMemo(() => {
+    const fromOpenTasks = tasks
+      .filter((t) => t.status !== "completed")
+      .map((t) => (t.project ?? "").trim())
+      .filter(Boolean);
+    const combined = new Set([...fromOpenTasks, ...localProjects]);
+    // Also include the current draft project so it stays selected after typing
+    if (project.trim()) combined.add(project.trim());
+    return Array.from(combined).sort((a, b) => a.localeCompare(b));
+  }, [tasks, localProjects, project]);
 
   const visibleTasks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -386,11 +372,9 @@ export default function KanbanBoard() {
 
     return COLUMNS.reduce<Record<Status, Task[]>>(
       (acc, col) => ({ ...acc, [col.key]: sorted.filter((t) => t.status === col.key) }),
-      { backlog: [], in_progress: [], review: [], completed: [] }
+      { backlog: [], in_progress: [], review: [], blocked: [], completed: [] }
     );
   }, [visibleTasks]);
-
-  const inProgressCount = grouped.in_progress.length;
 
   const riskSummary = useMemo(() => {
     const inScope = visibleTasks;
@@ -435,6 +419,25 @@ export default function KanbanBoard() {
       .slice(0, 3);
   }, [visibleTasks]);
 
+  const handleNewProject = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setLocalProjects((prev) => {
+      if (prev.includes(trimmed)) return prev;
+      return [...prev, trimmed].sort((a, b) => a.localeCompare(b));
+    });
+  };
+
+  const saveAddTaskNewProject = () => {
+    const name = newProjectDraft.trim();
+    if (name) {
+      handleNewProject(name);
+      setProject(name);
+    }
+    setShowAddTaskNewProject(false);
+    setNewProjectDraft("");
+  };
+
   const addTask = async () => {
     if (!title.trim()) return;
     const res = await fetch("/api/tasks", {
@@ -448,8 +451,11 @@ export default function KanbanBoard() {
       return;
     }
     setTasks((prev) => [data.task, ...prev]);
-    setError(null);
-    logActivity(`Created task: ${data.task.title}`);
+    if (data.warning) {
+      setError(`Task created, but project was not saved: ${data.warning}`);
+    } else {
+      setError(null);
+    }
     setTitle("");
     setProject("");
   };
@@ -473,33 +479,28 @@ export default function KanbanBoard() {
     return data.task as Task;
   };
 
-  const moveTask = async (taskId: string, next: Status) => {
+  const moveTask = async (taskId: string, next: Status): Promise<boolean> => {
     const target = tasks.find((t) => t.id === taskId);
-    if (!target) return;
-
-    if (next === "in_progress" && target.status !== "in_progress" && inProgressCount >= 1) {
-      setError("WIP limit reached: only 1 task can be In Progress at a time.");
-      return;
-    }
+    if (!target) return false;
 
     const previous = tasks;
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: next } : t)));
     try {
       await patchTask(taskId, { status: next });
-      logActivity(`Moved "${target.title}" to ${next.replace("_", " ")}`);
+      return true;
     } catch (e: unknown) {
+      console.error("[moveTask] patchTask FAILED", e);
       setTasks(previous);
       setError(e instanceof Error ? e.message : "Task update failed");
+      return false;
     }
   };
 
   const setPriorityForTask = async (taskId: string, p: Priority) => {
     const previous = tasks;
-    const task = tasks.find((t) => t.id === taskId);
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, priority: p } : t)));
     try {
       await patchTask(taskId, { priority: p });
-      if (task) logActivity(`Priority set to ${p}: ${task.title}`);
     } catch (e: unknown) {
       setTasks(previous);
       setError(e instanceof Error ? e.message : "Task update failed");
@@ -509,7 +510,12 @@ export default function KanbanBoard() {
   const handleDropToColumn = async (taskId: string, next: Status) => {
     setDropColumn(null);
     setDraggingTaskId(null);
-    await moveTask(taskId, next);
+    const target = tasks.find((t) => t.id === taskId);
+    const moved = await moveTask(taskId, next);
+    if (moved && target) {
+      const colLabel = next.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      showToast(`"${target.title}" moved to ${colLabel}`);
+    }
   };
 
   const setProjectDraft = (taskId: string, nextProject: string) => {
@@ -519,11 +525,9 @@ export default function KanbanBoard() {
   const setProjectForTask = async (taskId: string, nextProject: string) => {
     const normalized = nextProject.replace(/\s+/g, " ").trim();
     const previous = tasks;
-    const task = tasks.find((t) => t.id === taskId);
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, project: normalized || null } : t)));
     try {
       await patchTask(taskId, { project: normalized });
-      if (task) logActivity(`Project ${normalized ? `set to "${normalized}"` : "cleared"}: ${task.title}`);
     } catch (e: unknown) {
       setTasks(previous);
       setError(e instanceof Error ? e.message : "Task update failed");
@@ -533,10 +537,37 @@ export default function KanbanBoard() {
   const setRiskForTask = async (taskId: string, risk: NonNullable<Task["risk_state"]>) => {
     const previous = tasks;
     const task = tasks.find((t) => t.id === taskId);
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, risk_state: risk } : t)));
+    if (!task) return;
+
+    const patch: Record<string, unknown> = { risk_state: risk };
+    let nextStatus: Status | undefined;
+
+    if (risk === "blocked" && task.status !== "blocked") {
+      // Only save pre-block status if blocked_reason hasn't already saved it.
+      if (!preBlockStatuses[taskId]) {
+        setPreBlockStatuses((prev) => ({ ...prev, [taskId]: task.status }));
+      }
+      nextStatus = "blocked";
+      patch.status = "blocked";
+    } else if (risk !== "blocked" && task.status === "blocked") {
+      // Only restore if the blocked_reason isn't also holding the task in Blocked.
+      if (!(task.blocked_reason ?? "").trim()) {
+        const restored = preBlockStatuses[taskId] ?? "backlog";
+        setPreBlockStatuses((prev) => { const next = { ...prev }; delete next[taskId]; return next; });
+        nextStatus = restored;
+        patch.status = restored;
+      }
+    }
+
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId
+          ? { ...t, risk_state: risk, ...(nextStatus !== undefined ? { status: nextStatus } : {}) }
+          : t
+      )
+    );
     try {
-      await patchTask(taskId, { risk_state: risk });
-      if (task) logActivity(`Risk set to ${risk}: ${task.title}`);
+      await patchTask(taskId, patch);
     } catch (e: unknown) {
       setTasks(previous);
       setError(e instanceof Error ? e.message : "Task update failed");
@@ -545,11 +576,9 @@ export default function KanbanBoard() {
 
   const setEtaForTask = async (taskId: string, eta: string) => {
     const previous = tasks;
-    const task = tasks.find((t) => t.id === taskId);
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, eta: eta || null } : t)));
     try {
       await patchTask(taskId, { eta });
-      if (task) logActivity(`ETA ${eta ? `set to ${eta}` : "cleared"}: ${task.title}`);
     } catch (e: unknown) {
       setTasks(previous);
       setError(e instanceof Error ? e.message : "Task update failed");
@@ -559,10 +588,35 @@ export default function KanbanBoard() {
   const setBlockedReasonForTask = async (taskId: string, reason: string) => {
     const previous = tasks;
     const task = tasks.find((t) => t.id === taskId);
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, blocked_reason: reason || null } : t)));
+    if (!task) return;
+
+    const patch: Record<string, unknown> = { blocked_reason: reason };
+    let nextStatus: Status | undefined;
+
+    if (reason && task.status !== "blocked") {
+      // Moving to Blocked — save previous status locally so we can restore it later.
+      setPreBlockStatuses((prev) => ({ ...prev, [taskId]: task.status }));
+      nextStatus = "blocked";
+      patch.status = "blocked";
+    } else if (!reason && task.status === "blocked") {
+      // Clearing blocker — restore to the saved previous status (or backlog as fallback).
+      const restored = preBlockStatuses[taskId] ?? "backlog";
+      setPreBlockStatuses((prev) => { const next = { ...prev }; delete next[taskId]; return next; });
+      nextStatus = restored;
+      patch.status = restored;
+    }
+
+    setTasks((prev) => prev.map((t) => {
+      if (t.id !== taskId) return t;
+      return {
+        ...t,
+        blocked_reason: reason || null,
+        ...(nextStatus !== undefined ? { status: nextStatus } : {}),
+      };
+    }));
+
     try {
-      await patchTask(taskId, { blocked_reason: reason });
-      if (task) logActivity(`Blocker ${reason ? "updated" : "cleared"}: ${task.title}`);
+      await patchTask(taskId, patch);
     } catch (e: unknown) {
       setTasks(previous);
       setError(e instanceof Error ? e.message : "Task update failed");
@@ -591,7 +645,7 @@ export default function KanbanBoard() {
         patchTask(a.id, { sort_order: b.sort_order }),
         patchTask(b.id, { sort_order: a.sort_order }),
       ]);
-      logActivity(`Reordered backlog: ${a.title} ${direction === "up" ? "up" : "down"}`);
+      showToast(`Moved "${a.title}" ${direction === "up" ? "up ↑" : "down ↓"} in backlog`);
       await loadTasks();
     } catch (e: unknown) {
       setTasks(previous);
@@ -617,7 +671,6 @@ export default function KanbanBoard() {
       return;
     }
 
-    if (task) logActivity(`Deleted task: ${task.title}`);
   };
 
   const exportVisibleTasks = () => {
@@ -641,8 +694,6 @@ export default function KanbanBoard() {
     a.download = `kanban-export-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-
-    logActivity(`Exported ${visibleTasks.length} visible tasks (JSON)`);
   };
 
   const exportVisibleTasksCsv = () => {
@@ -681,8 +732,6 @@ export default function KanbanBoard() {
     a.download = `kanban-export-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-
-    logActivity(`Exported ${visibleTasks.length} visible tasks (CSV)`);
   };
 
   async function copyBoardSummary() {
@@ -690,6 +739,7 @@ export default function KanbanBoard() {
       backlog: visibleTasks.filter((t) => t.status === "backlog").length,
       inProgress: visibleTasks.filter((t) => t.status === "in_progress").length,
       review: visibleTasks.filter((t) => t.status === "review").length,
+      blocked: visibleTasks.filter((t) => t.status === "blocked").length,
       completed: visibleTasks.filter((t) => t.status === "completed").length,
     };
 
@@ -697,18 +747,21 @@ export default function KanbanBoard() {
     const summary = [
       `Kanban Summary (${new Date().toLocaleString()})`,
       `Visible tasks: ${visibleTasks.length}/${tasks.length}`,
-      `Filters: project=${projectFilter}, objective=${objectiveFilter}, risk=${riskFilter}, time=${timeFilter}`,
-      `Columns: backlog=${statusCounts.backlog}, in_progress=${statusCounts.inProgress}, review=${statusCounts.review}, completed=${statusCounts.completed}`,
-      `Risk: at_risk=${riskSummary.atRisk}, watch=${riskSummary.watch}, blocked=${riskSummary.blocked}, due_24h=${riskSummary.dueSoon}`,
+      `Filters: project=${projectFilter}, objective=${objectiveFilter}, risk=${riskFilter}, time=${timeFilter}, search=${searchQuery.trim() || "(none)"}`,
+      `Columns: backlog=${statusCounts.backlog}, in_progress=${statusCounts.inProgress}, review=${statusCounts.review}, blocked=${statusCounts.blocked}, completed=${statusCounts.completed}`,
+      `Risk: at_risk=${riskSummary.atRisk}, watch=${riskSummary.watch}, blocked=${riskSummary.blocked}, due_24h=${riskSummary.dueSoon}, stale_in_progress=${riskSummary.staleInProgress}`,
       `Top urgent:`,
       ...(topUrgentTasks.length
-        ? topUrgentTasks.map((t) => `- ${t.title} [${t.priority}] (${t.status})`)
+        ? topUrgentTasks.map((t) => {
+            const blocked = (t.blocked_reason ?? "").trim() ? " [BLOCKED]" : "";
+            const due = t.eta ? ` eta=${new Date(t.eta).toLocaleString()}` : "";
+            return `- ${t.title} [${t.priority}] (${t.status})${blocked}${due}`;
+          })
         : ["- none"]),
     ].join("\n");
 
     try {
       await navigator.clipboard.writeText(summary);
-      logActivity("Copied board summary to clipboard");
     } catch {
       const blob = new Blob([summary], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
@@ -719,7 +772,6 @@ export default function KanbanBoard() {
       URL.revokeObjectURL(url);
 
       setError("Clipboard blocked. Downloaded summary as TXT instead.");
-      logActivity("Clipboard blocked; downloaded board summary TXT");
     }
   }
 
@@ -731,7 +783,6 @@ export default function KanbanBoard() {
     setSearchQuery("");
     setConfirmDelete(true);
     setShowRelativeTimes(true);
-    setShowActivityPanel(true);
     setCompactCards(false);
     setShowBackgroundPanel(true);
     setShowTopUrgentPanel(true);
@@ -747,7 +798,6 @@ export default function KanbanBoard() {
     window.localStorage.removeItem("kb_search_query");
     window.localStorage.removeItem("kb_confirm_delete");
     window.localStorage.removeItem("kb_show_relative_times");
-    window.localStorage.removeItem("kb_show_activity_panel");
     window.localStorage.removeItem("kb_compact_cards");
     window.localStorage.removeItem("kb_show_background_panel");
     window.localStorage.removeItem("kb_show_top_urgent_panel");
@@ -755,50 +805,6 @@ export default function KanbanBoard() {
     window.localStorage.removeItem("kb_show_tips_panel");
     window.localStorage.removeItem("kb_bg_image_url");
     window.localStorage.removeItem("kb_bg_overlay");
-
-    logActivity("Reset board view preferences");
-  };
-
-  const duplicateTask = async (taskId: string) => {
-    const source = tasks.find((t) => t.id === taskId);
-    if (!source) return;
-
-    const payload = {
-      title: `${source.title} (copy ${new Date().toLocaleTimeString()})`,
-      project: source.project ?? "",
-      objective: source.objective,
-      priority: source.priority,
-    };
-
-    const res = await fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setError(data.error || "Failed to duplicate task");
-      return;
-    }
-
-    let createdTask = data.task as Task;
-
-    // Copy execution metadata in a follow-up patch so duplicates preserve planning context.
-    if (source.risk_state || source.eta || source.blocked_reason) {
-      try {
-        createdTask = await patchTask(createdTask.id, {
-          risk_state: source.risk_state ?? "normal",
-          eta: source.eta ?? "",
-          blocked_reason: source.blocked_reason ?? "",
-        });
-      } catch {
-        // non-fatal; keep duplicate even if metadata copy fails
-      }
-    }
-
-    setTasks((prev) => [createdTask, ...prev]);
-    logActivity(`Duplicated task: ${source.title}`);
   };
 
   const clearCompletedTasks = async () => {
@@ -829,336 +835,243 @@ export default function KanbanBoard() {
       return;
     }
 
-    logActivity(`Cleared ${completed.length} completed task(s)`);
   };
 
-  const objectiveMeta = (obj: Objective) => OBJECTIVES.find((o) => o.key === obj)!;
-
-  const formatRelative = (iso?: string | null) => {
-    if (!iso) return "-";
-    const ts = Date.parse(iso);
-    if (Number.isNaN(ts) || !nowTs) return "-";
-    const diffMs = nowTs - ts;
-    const absMin = Math.floor(Math.abs(diffMs) / 60000);
-
-    if (absMin < 1) return "just now";
-    if (absMin < 60) return `${absMin}m ago`;
-    const hrs = Math.floor(absMin / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.floor(hrs / 24);
-    return `${days}d ago`;
+  // ─── Shared light-theme style tokens ────────────────────────────────────────
+  const panelStyle: React.CSSProperties = {
+    background: "rgba(255,255,255,0.92)",
+    backdropFilter: "blur(8px)",
+    borderRadius: 12,
+    border: "1px solid rgba(9,30,66,0.13)",
+    padding: 16,
+  };
+  const panelHeading: React.CSSProperties = {
+    fontSize: 14, fontWeight: 700, color: "#172B4D", margin: "0 0 10px",
+  };
+  const fieldStyle: React.CSSProperties = {
+    background: "#FAFBFC",
+    border: "1px solid #DFE1E6",
+    borderRadius: 6,
+    color: "#172B4D",
+    fontSize: 13,
+    padding: "8px 12px",
+    minHeight: 38,
   };
 
-  const shellStyle = bgImageUrl
-    ? {
-        backgroundImage: `linear-gradient(rgba(2,6,23,${bgOverlay / 100}), rgba(2,6,23,${bgOverlay / 100})), url(${bgImageUrl})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundAttachment: "fixed",
-      }
-    : undefined;
+  const SHORTCUTS: { key: string; desc: string }[] = [
+    { key: "/",   desc: "Focus search" },
+    { key: "Esc", desc: "Clear search (when search focused)" },
+    { key: "n",   desc: "Focus new task title" },
+    { key: "r",   desc: "Refresh tasks" },
+    { key: "t",   desc: "Toggle tips panel" },
+    { key: "x",   desc: "Clear all filters/search" },
+    { key: "?",   desc: "Toggle this shortcuts panel" },
+  ];
+
+  const shellStyle = {
+    backgroundImage: bgImageUrl
+      ? `linear-gradient(rgba(2,6,23,${bgOverlay / 100}), rgba(2,6,23,${bgOverlay / 100})), url(${bgImageUrl})`
+      : "linear-gradient(135deg, #0062E6 0%, #33A1FD 30%, #59C3C3 60%, #7BCB72 100%)",
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    backgroundAttachment: "fixed",
+  };
 
   return (
-    <main style={shellStyle} className="min-h-screen bg-slate-950 text-white p-3 sm:p-4 md:p-6 space-y-4 md:space-y-5">
-      <header className="sticky top-0 z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-slate-950/80">
-        <div>
-          <h1 className="text-2xl font-bold">Eva’s Task Board</h1>
-          <p className="text-slate-400">Owner-only Kanban · shared across devices · auto-refresh 30s</p>
-          <p className="text-xs text-slate-500">Last sync: {updatedAt || "-"}</p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <button className="min-h-11 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-800" onClick={loadTasks}>Refresh</button>
-          <button className="min-h-11 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-800" onClick={exportVisibleTasks}>Export JSON</button>
-          <button className="min-h-11 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-800" onClick={exportVisibleTasksCsv}>Export CSV</button>
-          <button className="min-h-11 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-800" onClick={() => void copyBoardSummary()}>Copy Summary</button>
-          <button className="min-h-11 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-800" onClick={() => setShowShortcutsHelp((v) => !v)}>Shortcuts</button>
-          <button className="min-h-11 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-800" onClick={() => setShowTipsPanel((v) => !v)}>Tips</button>
-          <button className="min-h-11 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-800" onClick={resetViewPreferences}>Reset View</button>
-          <button className="min-h-11 rounded-lg border border-rose-700 px-4 py-2 text-sm font-medium text-rose-300 hover:bg-rose-950/40" onClick={() => void clearCompletedTasks()}>Clear Completed</button>
-          <button className="min-h-11 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-800" onClick={async () => { await fetch("/api/logout", { method: "POST" }); window.location.href = "/login"; }}>Logout</button>
-        </div>
-      </header>
+    <main style={shellStyle} className="min-h-screen text-white">
+      <TopBar
+        updatedAt={updatedAt}
+        onRefresh={loadTasks}
+        onExportJson={exportVisibleTasks}
+        onExportCsv={exportVisibleTasksCsv}
+        onCopySummary={() => void copyBoardSummary()}
+        onToggleShortcuts={() => setShowShortcutsHelp((v) => !v)}
+        onToggleTips={() => setShowTipsPanel((v) => !v)}
+        onResetView={resetViewPreferences}
+        onClearCompleted={() => void clearCompletedTasks()}
+        onLogout={async () => { await fetch("/api/logout", { method: "POST" }); window.location.href = "/login"; }}
+      />
+      <div className="p-3 sm:p-4 md:p-6 space-y-4 md:space-y-5">
 
-      {showShortcutsHelp ? (
-        <section className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-          <h2 className="font-semibold mb-2">Keyboard Shortcuts</h2>
-          <ul className="text-sm text-slate-300 space-y-1">
-            <li><span className="font-mono">/</span> Focus search</li>
-            <li><span className="font-mono">Esc</span> Clear search (when search focused)</li>
-            <li><span className="font-mono">n</span> Focus new task title</li>
-            <li><span className="font-mono">r</span> Refresh tasks</li>
-            <li><span className="font-mono">t</span> Toggle tips panel</li>
-            <li><span className="font-mono">x</span> Clear all filters/search</li>
-            <li><span className="font-mono">?</span> Toggle this shortcuts panel</li>
+      {showSettings && showShortcutsHelp ? (
+        <section style={panelStyle}>
+          <h2 style={panelHeading}>Keyboard Shortcuts</h2>
+          <ul style={{ fontSize: 13, color: "#172B4D", display: "flex", flexDirection: "column", gap: 4, listStyle: "none", margin: 0, padding: 0 }}>
+            {SHORTCUTS.map(({ key, desc }) => (
+              <li key={key} style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
+                <kbd style={{ background: "#F4F5F7", border: "1px solid #DFE1E6", borderRadius: 3, padding: "1px 6px", fontFamily: "monospace", fontSize: 12, color: "#172B4D" }}>{key}</kbd>
+                <span style={{ color: "#5E6C84" }}>{desc}</span>
+              </li>
+            ))}
           </ul>
         </section>
       ) : null}
 
-      {showTipsPanel ? (
-        <section className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-          <h2 className="font-semibold mb-2">Quick Tips</h2>
-          <ul className="text-sm text-slate-300 space-y-1 list-disc pl-5">
+      {showSettings && showTipsPanel ? (
+        <section style={panelStyle}>
+          <h2 style={panelHeading}>Quick Tips</h2>
+          <ul style={{ fontSize: 13, color: "#5E6C84", display: "flex", flexDirection: "column", gap: 4, paddingLeft: 18, margin: 0 }}>
             <li>Click risk/time summary chips to instantly filter down to problem tasks.</li>
-            <li>Use Top Urgent “Start” to move the most important task into In Progress.</li>
+            <li>Use Top Urgent "Start" to move the most important task into In Progress.</li>
             <li>Use Reset View if the board gets too filtered/customized.</li>
             <li>Use Export CSV for spreadsheet sharing and Copy Summary for chat updates.</li>
           </ul>
         </section>
       ) : null}
 
-      <section className="rounded-xl border border-slate-800 bg-slate-900 p-4 space-y-3">
-        <h2 className="font-semibold">Add Task</h2>
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+      <div>
+        <div
+          ref={stickyBlockRef}
+          style={{
+            position: "sticky",
+            top: 64,
+            zIndex: 40,
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+            backgroundImage: shellStyle.backgroundImage,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundAttachment: "fixed",
+          }}
+        >
+          <section style={{ ...panelStyle, display: "flex", flexDirection: "column", gap: 12 }}>
+        <h2 style={panelHeading}>Add Task</h2>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <input
             ref={titleInputRef}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void addTask();
-              }
-            }}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void addTask(); } }}
             placeholder="Task title"
-            className="md:col-span-2 min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
+            style={{ ...fieldStyle, flex: "2 1 180px" }}
           />
-          <input value={project} onChange={(e) => setProject(e.target.value)} placeholder="Project (optional)" className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2" />
-          <select value={objective} onChange={(e) => setObjective(e.target.value as Objective)} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2">
+          {showAddTaskNewProject ? (
+            <>
+              <input
+                autoFocus
+                value={newProjectDraft}
+                onChange={(e) => setNewProjectDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); saveAddTaskNewProject(); }
+                  if (e.key === "Escape") { setShowAddTaskNewProject(false); setNewProjectDraft(""); }
+                }}
+                placeholder="New project name"
+                style={{ ...fieldStyle, flex: "1 1 130px" }}
+              />
+              <button onClick={saveAddTaskNewProject} style={{ ...fieldStyle, flex: "0 0 auto", cursor: "pointer" }}>Save</button>
+              <button onClick={() => { setShowAddTaskNewProject(false); setNewProjectDraft(""); }} style={{ ...fieldStyle, flex: "0 0 auto", cursor: "pointer" }}>✕</button>
+            </>
+          ) : (
+            <select
+              value={project}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "__create__") { setShowAddTaskNewProject(true); setNewProjectDraft(""); setProject(""); return; }
+                setProject(v);
+              }}
+              style={{ ...fieldStyle, flex: "1 1 130px" }}
+            >
+              <option value="">— no project —</option>
+              {allProjectOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+              <option value="__create__">+ Create New Project</option>
+            </select>
+          )}
+          <select value={objective} onChange={(e) => setObjective(e.target.value as Objective)} style={{ ...fieldStyle, flex: "1 1 130px" }}>
             {OBJECTIVES.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
           </select>
-          <select value={priority} onChange={(e) => setPriority(e.target.value as Priority)} className="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2">
+          <select value={priority} onChange={(e) => setPriority(e.target.value as Priority)} style={{ ...fieldStyle, flex: "0 1 80px" }}>
             {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
           <button
             onClick={addTask}
             disabled={!title.trim()}
-            className="min-h-11 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 px-4 py-2 font-medium"
+            style={{ ...fieldStyle, flex: "0 0 auto", background: "#0079BF", color: "#fff", border: "none", fontWeight: 600, cursor: title.trim() ? "pointer" : "not-allowed", opacity: title.trim() ? 1 : 0.5 }}
           >
             Create
           </button>
-          <button
-            onClick={resetTaskDraft}
-            className="min-h-11 rounded-lg border border-slate-700 px-4 py-2 font-medium hover:bg-slate-800"
-          >
+          <button onClick={resetTaskDraft} style={{ ...fieldStyle, flex: "0 0 auto", cursor: "pointer" }}>
             Reset Draft
           </button>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <input
-            ref={searchInputRef}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search title/project/blocker (press /)"
-            className="min-h-9 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
-          />
-          {searchQuery ? (
-            <button
-              className="rounded border border-slate-700 px-2 py-1 text-xs hover:bg-slate-800"
-              onClick={() => {
-                setSearchQuery("");
-                searchInputRef.current?.focus();
-              }}
-            >
-              Clear search
-            </button>
-          ) : null}
 
-          <label className="text-slate-400">Project view</label>
-          <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} className="rounded border border-slate-700 bg-slate-950 px-2 py-1">
-            <option value="all">All projects</option>
-            {projectOptions.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
+        {/* ── Accordion toggle ── */}
+        <button
+          onClick={() => setShowSettings((v) => !v)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            width: "100%",
+            background: "#F4F5F7",
+            border: "1px solid #DFE1E6",
+            borderRadius: 6,
+            padding: "7px 12px",
+            fontSize: 12,
+            fontWeight: 600,
+            color: "#5E6C84",
+            cursor: "pointer",
+          }}
+        >
+          <span>Filters &amp; Settings</span>
+          <span style={{
+            display: "inline-block",
+            transform: showSettings ? "rotate(180deg)" : "rotate(0deg)",
+            transition: "transform 0.2s ease",
+            fontSize: 10,
+            lineHeight: 1,
+          }}>▼</span>
+        </button>
 
-          <label className="ml-0 sm:ml-3 text-slate-400">Objective</label>
-          <select
-            value={objectiveFilter}
-            onChange={(e) => setObjectiveFilter(e.target.value as Objective | "all")}
-            className="rounded border border-slate-700 bg-slate-950 px-2 py-1"
-          >
-            <option value="all">All objectives</option>
-            {OBJECTIVES.map((o) => (
-              <option key={o.key} value={o.key}>{o.label}</option>
-            ))}
-          </select>
-
-          <label className="ml-0 sm:ml-3 text-slate-400">Risk</label>
-          <select
-            value={riskFilter}
-            onChange={(e) => setRiskFilter(e.target.value as "all" | "normal" | "watch" | "at_risk" | "blocked")}
-            className="rounded border border-slate-700 bg-slate-950 px-2 py-1"
-          >
-            <option value="all">All risk</option>
-            <option value="normal">Normal</option>
-            <option value="watch">Watch</option>
-            <option value="at_risk">At risk</option>
-            <option value="blocked">Blocked</option>
-          </select>
-
-          <label className="ml-0 sm:ml-3 text-slate-400">Time</label>
-          <select
-            value={timeFilter}
-            onChange={(e) => setTimeFilter(e.target.value as "all" | "due_24h" | "stale_in_progress")}
-            className="rounded border border-slate-700 bg-slate-950 px-2 py-1"
-          >
-            <option value="all">All time</option>
-            <option value="due_24h">Due &lt; 24h</option>
-            <option value="stale_in_progress">Stale in-progress</option>
-          </select>
-
-          <button
-            className="rounded border border-slate-700 px-2 py-1 text-xs hover:bg-slate-800"
-            onClick={() => {
-              setProjectFilter("all");
-              setObjectiveFilter("all");
-              setRiskFilter("all");
-              setTimeFilter("all");
-              setSearchQuery("");
-            }}
-          >
-            Clear filters
-          </button>
-
-          <label className="ml-0 sm:ml-3 flex items-center gap-2 text-slate-400 text-xs">
-            <input
-              type="checkbox"
-              checked={confirmDelete}
-              onChange={(e) => setConfirmDelete(e.target.checked)}
-            />
-            Confirm delete
-          </label>
-
-          <label className="flex items-center gap-2 text-slate-400 text-xs">
-            <input
-              type="checkbox"
-              checked={showRelativeTimes}
-              onChange={(e) => setShowRelativeTimes(e.target.checked)}
-            />
-            Show relative times
-          </label>
-
-          <label className="flex items-center gap-2 text-slate-400 text-xs">
-            <input
-              type="checkbox"
-              checked={showActivityPanel}
-              onChange={(e) => setShowActivityPanel(e.target.checked)}
-            />
-            Show activity panel
-          </label>
-
-          <label className="flex items-center gap-2 text-slate-400 text-xs">
-            <input
-              type="checkbox"
-              checked={compactCards}
-              onChange={(e) => setCompactCards(e.target.checked)}
-            />
-            Compact cards
-          </label>
-
-          <label className="flex items-center gap-2 text-slate-400 text-xs">
-            <input
-              type="checkbox"
-              checked={showBackgroundPanel}
-              onChange={(e) => setShowBackgroundPanel(e.target.checked)}
-            />
-            Show background panel
-          </label>
-
-          <label className="flex items-center gap-2 text-slate-400 text-xs">
-            <input
-              type="checkbox"
-              checked={showTopUrgentPanel}
-              onChange={(e) => setShowTopUrgentPanel(e.target.checked)}
-            />
-            Show top urgent panel
-          </label>
-
-          <label className="flex items-center gap-2 text-slate-400 text-xs">
-            <input
-              type="checkbox"
-              checked={showTipsPanel}
-              onChange={(e) => setShowTipsPanel(e.target.checked)}
-            />
-            Show tips panel
-          </label>
-        </div>
-        <p className="text-xs text-slate-400">WIP limit active: max 1 task in “In Progress”. Drag and drop cards between columns is enabled.</p>
-        <p className="text-xs text-slate-500">Showing {visibleTasks.length} of {tasks.length} tasks with active filters.</p>
-        <div className="flex flex-wrap gap-2 text-xs">
-          <button
-            className="rounded-full border border-red-700/60 bg-red-950/40 px-2 py-1 text-red-200 hover:bg-red-900/40"
-            onClick={() => setRiskFilter("at_risk")}
-          >
-            At risk: {riskSummary.atRisk}
-          </button>
-          <button
-            className="rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-1 text-amber-200 hover:bg-amber-900/40"
-            onClick={() => setRiskFilter("normal")}
-          >
-            Normal: {riskSummary.normal}
-          </button>
-          <button
-            className="rounded-full border border-yellow-700/60 bg-yellow-950/40 px-2 py-1 text-yellow-200 hover:bg-yellow-900/40"
-            onClick={() => setRiskFilter("watch")}
-          >
-            Watch: {riskSummary.watch}
-          </button>
-          <button
-            className="rounded-full border border-sky-700/60 bg-sky-950/40 px-2 py-1 text-sky-200 hover:bg-sky-900/40"
-            onClick={() => setTimeFilter("due_24h")}
-          >
-            Due &lt; 24h: {riskSummary.dueSoon}
-          </button>
-          <button
-            className="rounded-full border border-purple-700/60 bg-purple-950/40 px-2 py-1 text-purple-200 hover:bg-purple-900/40"
-            onClick={() => setRiskFilter("blocked")}
-          >
-            Blocked: {riskSummary.blocked}
-          </button>
-          <button
-            className="rounded-full border border-orange-700/60 bg-orange-950/40 px-2 py-1 text-orange-200 hover:bg-orange-900/40"
-            onClick={() => setTimeFilter("stale_in_progress")}
-          >
-            Stale in-progress (&gt;48h): {riskSummary.staleInProgress}
-          </button>
-          {riskFilter !== "all" ? (
-            <button
-              className="rounded-full border border-slate-600 px-2 py-1 text-slate-300 hover:bg-slate-800"
-              onClick={() => setRiskFilter("all")}
-            >
-              Clear risk filter
-            </button>
-          ) : null}
-          {timeFilter !== "all" ? (
-            <button
-              className="rounded-full border border-slate-600 px-2 py-1 text-slate-300 hover:bg-slate-800"
-              onClick={() => setTimeFilter("all")}
-            >
-              Clear time filter
-            </button>
-          ) : null}
-        </div>
+        {showSettings && <>
+        <FilterBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchInputRef={searchInputRef}
+          projectFilter={projectFilter}
+          onProjectFilterChange={setProjectFilter}
+          projectOptions={projectOptions}
+          objectiveFilter={objectiveFilter}
+          onObjectiveFilterChange={setObjectiveFilter}
+          riskFilter={riskFilter}
+          onRiskFilterChange={setRiskFilter}
+          timeFilter={timeFilter}
+          onTimeFilterChange={setTimeFilter}
+          confirmDelete={confirmDelete}
+          onConfirmDeleteChange={setConfirmDelete}
+          showRelativeTimes={showRelativeTimes}
+          onShowRelativeTimesChange={setShowRelativeTimes}
+          compactCards={compactCards}
+          onCompactCardsChange={setCompactCards}
+          showBackgroundPanel={showBackgroundPanel}
+          onShowBackgroundPanelChange={setShowBackgroundPanel}
+          showTopUrgentPanel={showTopUrgentPanel}
+          onShowTopUrgentPanelChange={setShowTopUrgentPanel}
+          showTipsPanel={showTipsPanel}
+          onShowTipsPanelChange={setShowTipsPanel}
+          visibleCount={visibleTasks.length}
+          totalCount={tasks.length}
+          riskSummary={riskSummary}
+        />
 
         {showTopUrgentPanel ? (
-          <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
-            <p className="text-xs font-semibold text-slate-300 mb-2">Top Urgent (filtered view)</p>
+          <div style={{ background: "#F4F5F7", border: "1px solid #DFE1E6", borderRadius: 8, padding: "10px 12px" }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "#172B4D", marginBottom: 6 }}>Top Urgent (filtered view)</p>
             {topUrgentTasks.length === 0 ? (
-              <p className="text-xs text-slate-500">No urgent tasks in current view.</p>
+              <p style={{ fontSize: 12, color: "#7A869A", margin: 0 }}>No urgent tasks in current view.</p>
             ) : (
-              <ul className="space-y-1 text-xs text-slate-300">
+              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
                 {topUrgentTasks.map((t) => (
-                  <li key={t.id} className="flex items-center gap-2">
+                  <li key={t.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <button
-                      className="flex-1 truncate text-left hover:text-white"
-                      onClick={() => {
-                        setSearchQuery(t.title);
-                        searchInputRef.current?.focus();
-                      }}
+                      style={{ flex: 1, textAlign: "left", background: "none", border: "none", fontSize: 12, color: "#172B4D", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                      onClick={() => { setSearchQuery(t.title); searchInputRef.current?.focus(); }}
                     >
                       • {t.title} [{t.priority}] ({t.status})
                     </button>
                     {t.status !== "in_progress" && t.status !== "completed" ? (
                       <button
-                        className="rounded border border-blue-700 px-2 py-0.5 text-[10px] text-blue-200 hover:bg-blue-900/30"
+                        style={{ background: "#E6F0FF", border: "1px solid #B3D4FF", borderRadius: 3, color: "#0052CC", fontSize: 11, fontWeight: 600, padding: "2px 8px", cursor: "pointer", flexShrink: 0 }}
                         onClick={() => void moveTask(t.id, "in_progress")}
                       >
                         Start
@@ -1170,228 +1083,92 @@ export default function KanbanBoard() {
             )}
           </div>
         ) : null}
-        {error ? <p className="text-red-400 text-sm">{error}</p> : null}
-      </section>
+        {error ? <p style={{ fontSize: 13, color: "#BF2600", margin: 0 }}>{error}</p> : null}
+        </>}
+          </section>
+          {/* Sticky column headers row */}
+          <div ref={headersScrollRef} style={{ display: "flex", gap: 14, overflowX: "hidden" }}>
+            {COLUMNS.map((col) => (
+              <div
+                key={col.key}
+                style={{
+                  width: 280,
+                  flexShrink: 0,
+                  background: HEADER_COLORS[col.key],
+                  borderRadius: "12px 12px 0 0",
+                  padding: "10px 12px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#fff", textTransform: "uppercase", letterSpacing: "0.5px" }}>{col.label}</span>
+                <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(255,255,255,0.3)", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{grouped[col.key].length}</span>
+              </div>
+            ))}
+          </div>
+        </div>
 
-      {showBackgroundPanel ? (
-        <section className="rounded-xl border border-slate-800 bg-slate-900 p-4 space-y-3">
-          <h2 className="font-semibold">Background Style</h2>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-center">
+        <div ref={bodiesScrollRef} style={{ display: "flex", gap: 14, overflowX: "auto", paddingBottom: 16 }}>
+        {COLUMNS.map((col) => (
+          <KanbanColumn
+            key={col.key}
+            noHeader
+            bodyMinHeight={`calc(100vh - 64px - ${stickyBlockHeight}px)`}
+            label={col.label}
+            colKey={col.key}
+            tasks={grouped[col.key]}
+            backlogLength={grouped.backlog.length}
+            isDropTarget={dropColumn === col.key}
+            draggingTaskId={draggingTaskId}
+            compactCards={compactCards}
+            nowTs={nowTs}
+            showRelativeTimes={showRelativeTimes}
+            onDragOver={() => setDropColumn(col.key)}
+            onDragLeave={() => setDropColumn((prev) => (prev === col.key ? null : prev))}
+            onDrop={(taskId) => void handleDropToColumn(taskId, col.key)}
+            onDragStart={(taskId) => setDraggingTaskId(taskId)}
+            onDragEnd={() => { setDraggingTaskId(null); setDropColumn(null); }}
+            projectOptions={allProjectOptions}
+            onNewProject={handleNewProject}
+            onSetPriority={(taskId, p) => void setPriorityForTask(taskId, p)}
+            onSetProjectDraft={(taskId, v) => setProjectDraft(taskId, v)}
+            onSetProject={(taskId, v) => void setProjectForTask(taskId, v)}
+            onSetRisk={(taskId, r) => void setRiskForTask(taskId, r)}
+            onSetEta={(taskId, eta) => void setEtaForTask(taskId, eta)}
+            onSetBlockedReason={(taskId, reason) => void setBlockedReasonForTask(taskId, reason)}
+            onReorderUp={(taskId) => void reorderBacklog(taskId, "up")}
+            onReorderDown={(taskId) => void reorderBacklog(taskId, "down")}
+            onDelete={(taskId) => deleteTask(taskId)}
+          />
+        ))}
+        </div>
+      </div>
+
+      {showSettings && showBackgroundPanel ? (
+        <section style={{ ...panelStyle, display: "flex", flexDirection: "column", gap: 10 }}>
+          <h2 style={panelHeading}>Background Style</h2>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
             <input
               value={bgImageUrl}
               onChange={(e) => setBgImageUrl(e.target.value)}
-              placeholder="Image URL (optional)"
-              className="md:col-span-3 min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
+              placeholder="Image URL (optional — leave blank for gradient)"
+              style={{ ...fieldStyle, flex: "3 1 240px" }}
             />
-            <div className="md:col-span-2 flex items-center gap-3">
-              <label className="text-sm text-slate-400">Overlay {bgOverlay}%</label>
-              <input
-                type="range"
-                min={0}
-                max={90}
-                value={bgOverlay}
-                onChange={(e) => setBgOverlay(Number(e.target.value))}
-                className="w-full"
-              />
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "2 1 180px" }}>
+              <label style={{ fontSize: 13, color: "#5E6C84", whiteSpace: "nowrap" }}>Overlay {bgOverlay}%</label>
+              <input type="range" min={0} max={90} value={bgOverlay} onChange={(e) => setBgOverlay(Number(e.target.value))} style={{ flex: 1 }} />
             </div>
           </div>
-          <p className="text-xs text-slate-500">Tip: set a hosted image URL. Leave blank to use the default dark background.</p>
+          <p style={{ fontSize: 12, color: "#7A869A", margin: 0 }}>Tip: set a hosted image URL. Leave blank to use the default gradient background.</p>
         </section>
       ) : null}
 
-      {showActivityPanel ? (
-        <section className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-semibold">Recent Activity</h2>
-            <button
-              className="text-xs rounded border border-slate-700 px-2 py-1 hover:bg-slate-800"
-              onClick={() => {
-                setActivity([]);
-                window.localStorage.removeItem("kb_activity_v1");
-              }}
-            >
-              Clear
-            </button>
-          </div>
-          {activity.length === 0 ? (
-            <p className="text-sm text-slate-500">No recent activity yet.</p>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {activity.slice(0, 8).map((event, idx) => (
-                <li key={`${event.at}-${idx}`} className="flex items-start justify-between gap-3 rounded-md border border-slate-800 bg-slate-950 px-3 py-2">
-                  <span className="text-slate-200">{event.message}</span>
-                  <span className="shrink-0 text-xs text-slate-500">{new Date(event.at).toLocaleTimeString()}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ) : null}
+      {loading ? <p style={{ fontSize: 13, color: "#5E6C84" }}>Loading tasks…</p> : null}
 
-      {loading ? <p className="text-slate-400">Loading tasks...</p> : null}
-
-      <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {COLUMNS.map((col) => (
-          <div
-            key={col.key}
-            className={`rounded-xl border p-4 transition ${dropColumn === col.key ? "border-blue-500 bg-slate-900/90" : "border-slate-800 bg-slate-900"}`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDropColumn(col.key);
-            }}
-            onDragLeave={() => setDropColumn((prev) => (prev === col.key ? null : prev))}
-            onDrop={(e) => {
-              e.preventDefault();
-              const taskId = e.dataTransfer.getData("text/task-id");
-              if (taskId) {
-                void handleDropToColumn(taskId, col.key);
-              }
-            }}
-          >
-            <h3 className="font-semibold mb-3">{col.label} ({grouped[col.key].length})</h3>
-            <div className="space-y-3">
-              {grouped[col.key].map((task, idx) => {
-                const meta = objectiveMeta(task.objective);
-                return (
-                  <article
-                    key={task.id}
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData("text/task-id", task.id);
-                      setDraggingTaskId(task.id);
-                    }}
-                    onDragEnd={() => {
-                      setDraggingTaskId(null);
-                      setDropColumn(null);
-                    }}
-                    className={`rounded-lg border bg-slate-950 ${compactCards ? "p-2 space-y-2" : "p-3 space-y-3"} ${draggingTaskId === task.id ? "border-blue-500 opacity-70" : "border-slate-700"}`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-1">
-                        <p className="font-medium">{task.title}</p>
-                        <div className="flex flex-wrap gap-1">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${meta.color}`}>{meta.label}</span>
-                          {task.risk_state === "at_risk" ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-700 text-white">AT RISK</span>
-                          ) : task.risk_state === "watch" ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-700 text-white">WATCH</span>
-                          ) : (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-100">NORMAL</span>
-                          )}
-                          {(task.blocked_reason ?? "").trim() ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-700 text-white">BLOCKED</span>
-                          ) : null}
-                          {task.eta ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-700 text-white">ETA {new Date(task.eta).toLocaleDateString()}</span>
-                          ) : null}
-                          {task.status === "in_progress" && task.started_at && nowTs - Date.parse(task.started_at) > 48 * 60 * 60 * 1000 ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-700 text-white">STALE &gt;48H</span>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <label className="text-slate-400">Priority</label>
-                      <select value={task.priority} onChange={(e) => setPriorityForTask(task.id, e.target.value as Priority)} className="rounded border border-slate-700 bg-slate-900 px-2 py-1">
-                        {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <label className="text-slate-400">Project</label>
-                      <input
-                        value={task.project ?? ""}
-                        onChange={(e) => setProjectDraft(task.id, e.target.value)}
-                        onBlur={(e) => {
-                          void setProjectForTask(task.id, e.currentTarget.value);
-                        }}
-                        placeholder="Unassigned"
-                        className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      <div className="flex items-center gap-2">
-                        <label className="text-slate-400">Risk</label>
-                        <select
-                          value={task.risk_state ?? "normal"}
-                          onChange={(e) => void setRiskForTask(task.id, e.target.value as NonNullable<Task["risk_state"]>)}
-                          className="rounded border border-slate-700 bg-slate-900 px-2 py-1"
-                        >
-                          {RISK_STATES.map((r) => (
-                            <option key={r} value={r}>{r}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-slate-400">ETA</label>
-                        <input
-                          type="datetime-local"
-                          defaultValue={task.eta ? task.eta.slice(0, 16) : ""}
-                          onBlur={(e) => {
-                            const v = e.currentTarget.value;
-                            void setEtaForTask(task.id, v ? new Date(v).toISOString() : "");
-                          }}
-                          className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2 text-xs">
-                      <label className="text-slate-400 mt-1">Blocker</label>
-                      <input
-                        defaultValue={task.blocked_reason ?? ""}
-                        onBlur={(e) => {
-                          void setBlockedReasonForTask(task.id, e.currentTarget.value.trim());
-                        }}
-                        placeholder="Optional blocked reason"
-                        className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
-                      />
-                    </div>
-                    {showRelativeTimes ? (
-                      <p className="text-[11px] text-slate-500">Updated {formatRelative(task.updated_at)} · Created {formatRelative(task.created_at)}</p>
-                    ) : null}
-                    <div className="flex gap-2 flex-wrap">
-                      {col.key === "backlog" ? (
-                        <>
-                          <button className="min-h-9 text-xs rounded border border-slate-600 px-3 py-1.5" onClick={() => reorderBacklog(task.id, "up")} disabled={idx===0}>↑</button>
-                          <button className="min-h-9 text-xs rounded border border-slate-600 px-3 py-1.5" onClick={() => reorderBacklog(task.id, "down")} disabled={idx===grouped.backlog.length-1}>↓</button>
-                        </>
-                      ) : null}
-                      {col.key !== "backlog" && (
-                        <button
-                          className="min-h-9 text-xs rounded border border-slate-600 px-3 py-1.5"
-                          onClick={() =>
-                            moveTask(
-                              task.id,
-                              col.key === "in_progress" ? "backlog" : col.key === "review" ? "in_progress" : "review"
-                            )
-                          }
-                        >
-                          ← Back
-                        </button>
-                      )}
-                      {col.key !== "completed" && (
-                        <button
-                          className="min-h-9 text-xs rounded border border-slate-600 px-3 py-1.5"
-                          onClick={() =>
-                            moveTask(
-                              task.id,
-                              col.key === "backlog" ? "in_progress" : col.key === "in_progress" ? "review" : "completed"
-                            )
-                          }
-                        >
-                          Next →
-                        </button>
-                      )}
-                      <button className="min-h-9 text-xs rounded border border-cyan-700 text-cyan-300 px-3 py-1.5" onClick={() => duplicateTask(task.id)}>Duplicate</button>
-                      <button className="min-h-9 text-xs rounded border border-red-700 text-red-300 px-3 py-1.5" onClick={() => deleteTask(task.id)}>Delete</button>
-                    </div>
-                  </article>
-                );
-              })}
-              {grouped[col.key].length === 0 ? <p className="text-sm text-slate-500">No tasks</p> : null}
-            </div>
-          </div>
-        ))}
-      </section>
+      </div>
+      {toast && <Toast message={toast} />}
     </main>
   );
 }

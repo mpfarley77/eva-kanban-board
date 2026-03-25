@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 
-type Status = "backlog" | "in_progress" | "review" | "completed";
-const PROJECT_COL_ERR = "column tasks.project does not exist";
+type Status = "backlog" | "in_progress" | "review" | "blocked" | "completed";
 const OWNER = "Eva";
-function isProjectColMissing(msg: string){
-  const m=msg.toLowerCase();
-  return (m.includes("project") && (m.includes("does not exist") || m.includes("schema cache"))) || m.includes(PROJECT_COL_ERR);
+const OPTIONAL_COLS = ["project", "pre_block_status"];
+function isOptionalColMissing(msg: string) {
+  const m = msg.toLowerCase();
+  return (m.includes("does not exist") || m.includes("schema cache")) &&
+    OPTIONAL_COLS.some((col) => m.includes(col));
 }
 
 function isNoRows(msg: string) {
@@ -25,7 +26,7 @@ export async function PATCH(
   const updates: Record<string, unknown> = { last_update_at: new Date().toISOString() };
 
   if (body.status) {
-    if (!["backlog", "in_progress", "review", "completed"].includes(body.status)) {
+    if (!["backlog", "in_progress", "review", "blocked", "completed"].includes(body.status)) {
       return NextResponse.json({ error: "invalid status" }, { status: 400 });
     }
     updates.status = body.status as Status;
@@ -89,16 +90,17 @@ export async function PATCH(
   if (isNoRows(withProject.error.message)) {
     return NextResponse.json({ error: "task not found for owner" }, { status: 404 });
   }
-  if (!isProjectColMissing(withProject.error.message)) {
+  if (!isOptionalColMissing(withProject.error.message)) {
     return NextResponse.json({ error: withProject.error.message }, { status: 500 });
   }
 
-  const updatesNoProject = { ...updates } as Record<string, unknown>;
-  delete updatesNoProject.project;
+  // Fallback: project column missing — strip it from both updates and SELECT
+  const fallbackUpdates = { ...updates } as Record<string, unknown>;
+  delete fallbackUpdates.project;
 
   const fallback = await supabase
     .from("tasks")
-    .update(updatesNoProject)
+    .update(fallbackUpdates)
     .eq("id", id)
     .eq("owner", OWNER)
     .select("id,title,objective,status,priority,sort_order,owner,started_at,eta,blocked_reason,last_update_at,risk_state,created_at,updated_at")

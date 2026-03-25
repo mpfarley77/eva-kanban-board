@@ -118,15 +118,26 @@ Use this checklist to validate current behavior before/after deploy.
 ## 13) Owner Scope + Data Isolation
 
 - [ ] Create tasks as owner and verify `/api/tasks` returns only owner records.
-- [ ] PATCH with non-owner task id returns no task update (no cross-owner mutation).
-- [ ] DELETE with non-owner task id does not remove other owners' records.
+- [ ] PATCH with non-owner task id returns HTTP 404 / not-found for owner (no cross-owner mutation).
+- [ ] DELETE with non-owner task id returns HTTP 404 / not-found for owner and does not remove other owners' records.
 - [ ] Automation `seed/reset/rebucket` affects owner-scoped records only.
+- [ ] Seed reset creates exactly one initial `in_progress` task (WIP-safe default).
 - [ ] With service role key set, behavior remains owner-scoped.
 
-## 14) Build/Quality Gates
+## 14) App Shell / Metadata
+
+- [ ] Browser/app title shows "Personal Kanban Board".
+- [ ] App metadata/application name is present for installable/app-like surfaces.
+
+## 15) Build/Quality Gates
 
 - [x] `npm run lint` passes.
 - [x] `npm run build` passes.
+
+## 15) Filter Visibility UX
+
+- [ ] Verify Activity Snapshot shows active filter chips for search/project/objective/risk/time.
+- [ ] Verify chips disappear when filters reset to `all` / empty search.
 
 ## Optional Regression Notes
 

@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 
 type TaskOut = { status:string; priority:string; sort_order:number|null; updated_at:string };
-const PROJECT_COL_ERR = "column tasks.project does not exist";
 const OWNER = "Eva";
-function isProjectColMissing(msg: string){
-  const m=msg.toLowerCase();
-  return (m.includes("project") && (m.includes("does not exist") || m.includes("schema cache"))) || m.includes(PROJECT_COL_ERR);
+
+// Detects when any optional column (project, pre_block_status) is missing from the schema.
+const OPTIONAL_COLS = ["project", "pre_block_status"];
+function isOptionalColMissing(msg: string) {
+  const m = msg.toLowerCase();
+  return (m.includes("does not exist") || m.includes("schema cache")) &&
+    OPTIONAL_COLS.some((col) => m.includes(col));
 }
+
 function sortTasks(tasks: TaskOut[]) {
   return [...tasks].sort((a, b) => {
     if (a.status !== b.status) return 0;
@@ -21,20 +25,21 @@ function sortTasks(tasks: TaskOut[]) {
 export async function GET() {
   const supabase = getSupabase();
 
-  const withProject = await supabase
+  // Tier 1: full select — project + pre_block_status
+  const full = await supabase
     .from("tasks")
     .select("id,title,project,objective,status,priority,sort_order,owner,started_at,eta,blocked_reason,last_update_at,risk_state,created_at,updated_at")
     .eq("owner", OWNER)
     .order("created_at", { ascending: false });
 
-  if (!withProject.error) {
-    return NextResponse.json({ tasks: sortTasks(withProject.data ?? []) });
+  if (!full.error) {
+    return NextResponse.json({ tasks: sortTasks(full.data ?? []) });
+  }
+  if (!isOptionalColMissing(full.error.message)) {
+    return NextResponse.json({ error: full.error.message }, { status: 500 });
   }
 
-  if (!isProjectColMissing(withProject.error.message)) {
-    return NextResponse.json({ error: withProject.error.message }, { status: 500 });
-  }
-
+  // Fallback: project column missing — select without it
   const fallback = await supabase
     .from("tasks")
     .select("id,title,objective,status,priority,sort_order,owner,started_at,eta,blocked_reason,last_update_at,risk_state,created_at,updated_at")
@@ -117,9 +122,12 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (!firstInsert.error) return NextResponse.json({ task: firstInsert.data }, { status: 201 });
-  if (!isProjectColMissing(firstInsert.error.message)) {
+  if (!isOptionalColMissing(firstInsert.error.message)) {
     return NextResponse.json({ error: firstInsert.error.message }, { status: 500 });
   }
+
+  // Fallback: project column missing
+  console.error("[POST /api/tasks] project column missing or schema-cache error; task will be created WITHOUT project:", firstInsert.error.message);
 
   const fallbackInsert = await supabase
     .from("tasks")
@@ -137,5 +145,8 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (fallbackInsert.error) return NextResponse.json({ error: fallbackInsert.error.message }, { status: 500 });
-  return NextResponse.json({ task: { ...fallbackInsert.data, project: null } }, { status: 201 });
+  return NextResponse.json(
+    { task: { ...fallbackInsert.data, project: null }, warning: "project column unavailable; project was not saved" },
+    { status: 201 }
+  );
 }
