@@ -1287,7 +1287,7 @@ export default function KanbanBoard() {
           )}
 
           <p style={{ fontSize: 12, color: "#7A869A", margin: 0 }}>
-            Upload a JPG, PNG, WebP, or GIF. Leave empty to use the default gradient.
+            Upload a JPG, PNG, WebP, or GIF. GIFs must be under 4.5MB to loop. Leave empty to use the default gradient.
           </p>
         </section>
       ) : null}
