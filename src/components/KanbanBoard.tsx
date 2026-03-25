@@ -109,8 +109,12 @@ export default function KanbanBoard() {
     const savedUrl = window.localStorage.getItem("kb_bg_image_url") ?? "";
     const savedOverlay = Number(window.localStorage.getItem("kb_bg_overlay") ?? "55");
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setBgImageUrl(savedUrl);
+    if (savedUrl && savedUrl.startsWith("http")) {
+      setBgImageUrl(savedUrl);
+    } else {
+      setBgImageUrl("");
+      window.localStorage.removeItem("kb_bg_image_url");
+    }
     setBgOverlay(Number.isFinite(savedOverlay) ? Math.min(90, Math.max(0, savedOverlay)) : 55);
   }, []);
 
