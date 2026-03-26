@@ -395,7 +395,7 @@ export default function KanbanBoard() {
       const next24h = nowTs + 24 * 60 * 60 * 1000;
       return etaTs >= nowTs && etaTs <= next24h && t.status !== "completed";
     }).length;
-    const blocked = inScope.filter((t) => (t.blocked_reason ?? "").trim().length > 0 && t.status !== "completed").length;
+    const blocked = inScope.filter((t) => t.status === "blocked").length;
     const staleInProgress = inScope.filter((t) => {
       if (t.status !== "in_progress" || !t.started_at) return false;
       const startedTs = Date.parse(t.started_at);
