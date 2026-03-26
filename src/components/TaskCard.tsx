@@ -186,8 +186,8 @@ export default function TaskCard({
       onMouseLeave={() => setHovered(false)}
       style={cardStyle}
     >
-      {/* ── Six-dot grip handle (backlog only, visible on hover) ── */}
-      {colKey === "backlog" && (
+      {/* ── Six-dot grip handle (all columns, visible on hover) ── */}
+      {(
         <div
           style={{
             width: 20,
