@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { type Status, type Priority, type Task } from "./types";
 import TaskCard from "./TaskCard";
 
@@ -9,6 +10,14 @@ export const HEADER_COLORS: Record<Status, string> = {
   review:      "#89609E",
   blocked:     "#C0392B",
   completed:   "#519839",
+};
+
+const DROP_PLACEHOLDER: React.CSSProperties = {
+  border: "2px dashed #0079BF",
+  background: "rgba(0, 121, 191, 0.08)",
+  borderRadius: 4,
+  height: 4,
+  flexShrink: 0,
 };
 
 type Props = {
@@ -36,6 +45,7 @@ type Props = {
   onSetBlockedReason: (taskId: string, reason: string) => void;
   onReorderUp: (taskId: string) => void;
   onReorderDown: (taskId: string) => void;
+  onReorderInColumn: (taskId: string, toIndex: number) => void;
   onDelete: (taskId: string) => void;
   noHeader?: boolean;
   bodyMinHeight?: string;
@@ -66,20 +76,27 @@ export default function KanbanColumn({
   onSetBlockedReason,
   onReorderUp,
   onReorderDown,
+  onReorderInColumn,
   onDelete,
   noHeader,
   bodyMinHeight,
 }: Props) {
   const headerColor = HEADER_COLORS[colKey];
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+
+  // True when the card being dragged originates from this column.
+  const isDraggingWithin =
+    draggingTaskId !== null && tasks.some((t) => t.id === draggingTaskId);
 
   return (
     <div
       className="kb-col"
       style={{
         borderRadius: noHeader ? "0 0 12px 12px" : 12,
-        background: isDropTarget
-          ? "rgba(179, 212, 255, 0.55)"
-          : "rgba(235, 236, 240, 0.95)",
+        background:
+          isDropTarget && !isDraggingWithin
+            ? "rgba(179, 212, 255, 0.55)"
+            : "rgba(235, 236, 240, 0.95)",
         transition: "background 0.15s",
         minHeight: bodyMinHeight,
       }}
@@ -87,12 +104,19 @@ export default function KanbanColumn({
       onDragLeave={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
           onDragLeave();
+          setDropIndex(null);
         }
       }}
       onDrop={(e) => {
         e.preventDefault();
         const taskId = e.dataTransfer.getData("text/task-id");
-        if (taskId) onDrop(taskId);
+        if (!taskId) return;
+        if (isDraggingWithin && dropIndex !== null) {
+          onReorderInColumn(taskId, dropIndex);
+        } else {
+          onDrop(taskId);
+        }
+        setDropIndex(null);
       }}
     >
       {/* Column header */}
@@ -143,36 +167,64 @@ export default function KanbanColumn({
 
       {/* Column body */}
       <div style={{ padding: "10px 8px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-        {tasks.map((task, idx) => (
-          <TaskCard
-            key={task.id}
-            task={task}
-            colKey={colKey}
-            isFirst={idx === 0}
-            isLast={idx === backlogLength - 1}
-            compactCards={compactCards}
-            isDragging={draggingTaskId === task.id}
-            nowTs={nowTs}
-            showRelativeTimes={showRelativeTimes}
-            onDragStart={() => onDragStart(task.id)}
-            onDragEnd={onDragEnd}
-            projectOptions={projectOptions}
-            onNewProject={onNewProject}
-            onSetPriority={(p) => onSetPriority(task.id, p)}
-            onSetProjectDraft={(v) => onSetProjectDraft(task.id, v)}
-            onSetProject={(v) => onSetProject(task.id, v)}
-            onSetRisk={(r) => onSetRisk(task.id, r)}
-            onSetEta={(eta) => onSetEta(task.id, eta)}
-            onSetBlockedReason={(reason) => onSetBlockedReason(task.id, reason)}
-            onReorderUp={() => onReorderUp(task.id)}
-            onReorderDown={() => onReorderDown(task.id)}
-            onDelete={() => onDelete(task.id)}
-          />
-        ))}
+        {tasks.flatMap((task, idx) => {
+          const items: React.ReactNode[] = [];
+
+          // Thin placeholder above this card when dragging within the column.
+          if (isDraggingWithin && dropIndex === idx) {
+            items.push(<div key={`ph-${idx}`} style={DROP_PLACEHOLDER} />);
+          }
+
+          items.push(
+            <div
+              key={task.id}
+              onDragOver={(e) => {
+                if (!isDraggingWithin) return;
+                e.preventDefault();
+                const rect = e.currentTarget.getBoundingClientRect();
+                setDropIndex(e.clientY < rect.top + rect.height / 2 ? idx : idx + 1);
+              }}
+            >
+              <TaskCard
+                task={task}
+                colKey={colKey}
+                isFirst={idx === 0}
+                isLast={idx === backlogLength - 1}
+                compactCards={compactCards}
+                isDragging={draggingTaskId === task.id}
+                nowTs={nowTs}
+                showRelativeTimes={showRelativeTimes}
+                onDragStart={() => onDragStart(task.id)}
+                onDragEnd={() => { setDropIndex(null); onDragEnd(); }}
+                projectOptions={projectOptions}
+                onNewProject={onNewProject}
+                onSetPriority={(p) => onSetPriority(task.id, p)}
+                onSetProjectDraft={(v) => onSetProjectDraft(task.id, v)}
+                onSetProject={(v) => onSetProject(task.id, v)}
+                onSetRisk={(r) => onSetRisk(task.id, r)}
+                onSetEta={(eta) => onSetEta(task.id, eta)}
+                onSetBlockedReason={(reason) => onSetBlockedReason(task.id, reason)}
+                onReorderUp={() => onReorderUp(task.id)}
+                onReorderDown={() => onReorderDown(task.id)}
+                onDelete={() => onDelete(task.id)}
+              />
+            </div>
+          );
+
+          return items;
+        })}
+
+        {/* Placeholder at the end of the list */}
+        {isDraggingWithin && dropIndex === tasks.length && (
+          <div style={DROP_PLACEHOLDER} />
+        )}
+
         {tasks.length === 0 && !isDropTarget && (
           <p style={{ fontSize: 13, color: "#5E6C84", padding: "4px 4px" }}>No tasks</p>
         )}
-        {isDropTarget && (
+
+        {/* Between-column drop indicator — only when dragging from another column */}
+        {isDropTarget && !isDraggingWithin && (
           <div
             style={{
               border: "2px dashed #0079BF",

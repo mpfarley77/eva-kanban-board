@@ -303,7 +303,7 @@ export default function KanbanBoard() {
 
       if (e.key.toLowerCase() === "t" && !isTypingContext) {
         e.preventDefault();
-        setShowTipsPanel((prev) => !prev);
+        setShowShortcutsHelp((prev) => !prev);
         return;
       }
 
@@ -371,9 +371,11 @@ export default function KanbanBoard() {
   const grouped = useMemo(() => {
     const sorted = [...visibleTasks].sort((a, b) => {
       if (a.status !== b.status) return 0;
-      if (a.status === "backlog") {
-        return (a.sort_order ?? 9999) - (b.sort_order ?? 9999);
-      }
+      // Use sort_order for all columns when available (set by drag-reorder).
+      // Tasks without sort_order fall back to newest-updated-first.
+      if (a.sort_order != null && b.sort_order != null) return a.sort_order - b.sort_order;
+      if (a.sort_order != null) return -1;
+      if (b.sort_order != null) return 1;
       return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
     });
 
@@ -640,6 +642,33 @@ export default function KanbanBoard() {
     }
   };
 
+  const reorderInColumn = async (taskId: string, colKey: Status, toIndex: number) => {
+    const colTasks = [...grouped[colKey]];
+    const fromIdx = colTasks.findIndex((t) => t.id === taskId);
+    if (fromIdx < 0) return;
+    // Remove the dragged task then insert at the adjusted position.
+    const [moved] = colTasks.splice(fromIdx, 1);
+    const insertAt = toIndex > fromIdx ? toIndex - 1 : toIndex;
+    colTasks.splice(insertAt, 0, moved);
+
+    // Assign consecutive sort_orders (spaced by 1000) to every task in the column.
+    const updates = colTasks.map((t, i) => ({ id: t.id, sort_order: (i + 1) * 1000 }));
+
+    const previous = tasks;
+    setTasks((prev) =>
+      prev.map((t) => {
+        const u = updates.find((u) => u.id === t.id);
+        return u ? { ...t, sort_order: u.sort_order } : t;
+      })
+    );
+    try {
+      await Promise.all(updates.map((u) => patchTask(u.id, { sort_order: u.sort_order })));
+    } catch (e: unknown) {
+      setTasks(previous);
+      setError(e instanceof Error ? e.message : "Reorder failed");
+    }
+  };
+
   const deleteTask = async (taskId: string) => {
     const previous = tasks;
     const task = tasks.find((t) => t.id === taskId);
@@ -764,9 +793,7 @@ export default function KanbanBoard() {
     setShowRelativeTimes(true);
     setCompactCards(false);
     setShowBackgroundPanel(true);
-    setShowTopUrgentPanel(true);
     setShowShortcutsHelp(false);
-    setShowTipsPanel(false);
     setBgImageUrl("");
     setBgOverlay(55);
 
@@ -865,7 +892,7 @@ export default function KanbanBoard() {
         onExportCsv={exportVisibleTasksCsv}
         onCopySummary={() => void copyBoardSummary()}
         onToggleShortcuts={() => setShowShortcutsHelp((v) => !v)}
-        onToggleTips={() => setShowTipsPanel((v) => !v)}
+        onToggleTips={() => setShowShortcutsHelp((v) => !v)}
         onResetView={resetViewPreferences}
         onClearCompleted={() => void clearCompletedTasks()}
         onLogout={async () => { await fetch("/api/logout", { method: "POST" }); window.location.href = "/login"; }}
@@ -1079,6 +1106,7 @@ export default function KanbanBoard() {
             onSetBlockedReason={(taskId, reason) => void setBlockedReasonForTask(taskId, reason)}
             onReorderUp={(taskId) => void reorderBacklog(taskId, "up")}
             onReorderDown={(taskId) => void reorderBacklog(taskId, "down")}
+            onReorderInColumn={(taskId, toIndex) => void reorderInColumn(taskId, col.key, toIndex)}
             onDelete={(taskId) => deleteTask(taskId)}
           />
         ))}
