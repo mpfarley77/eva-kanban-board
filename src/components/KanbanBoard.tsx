@@ -643,6 +643,8 @@ export default function KanbanBoard() {
   };
 
   const dropAtIndex = async (taskId: string, colKey: Status, toIndex: number) => {
+    setDraggingTaskId(null);
+    setDropColumn(null);
     const target = tasks.find((t) => t.id === taskId);
     if (!target) return;
 
