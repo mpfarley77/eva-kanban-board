@@ -90,6 +90,16 @@ export default function KanbanColumn({
   const isDraggingWithin =
     draggingTaskId !== null && tasks.some((t) => t.id === draggingTaskId);
 
+  // Index of the card being dragged within this column's task list (−1 if cross-column).
+  const fromIdx = isDraggingWithin
+    ? tasks.findIndex((t) => t.id === draggingTaskId)
+    : -1;
+
+  // For same-column drags, dropping at fromIdx (above the card) or fromIdx+1 (below
+  // the card) would leave the order unchanged — don't show a placeholder there.
+  const isNoOpDrop = (idx: number) =>
+    isDraggingWithin && (idx === fromIdx || idx === fromIdx + 1);
+
   return (
     <div
       className="kb-col"
@@ -122,7 +132,9 @@ export default function KanbanColumn({
         if (!taskId) { setDropIndex(null); return; }
         const idx = dropIndex ?? tasks.length;
         if (isDraggingWithin) {
-          onReorderInColumn(taskId, idx);
+          // Skip the API call when the drop position is adjacent to the card's
+          // current position — the order would be unchanged.
+          if (!isNoOpDrop(idx)) onReorderInColumn(taskId, idx);
         } else {
           onDropAtIndex(taskId, idx);
         }
@@ -156,8 +168,8 @@ export default function KanbanColumn({
         {tasks.flatMap((task, idx) => {
           const items: React.ReactNode[] = [];
 
-          // Positional placeholder — same style for both intra and cross-column drags.
-          if (dropIndex === idx) {
+          // Positional placeholder — hidden when the drop would be a no-op.
+          if (dropIndex === idx && !isNoOpDrop(idx)) {
             items.push(
               <div key={`ph-${idx}`} style={DROP_PLACEHOLDER}
                 onDragOver={(e) => e.preventDefault()} />
@@ -203,7 +215,7 @@ export default function KanbanColumn({
         })}
 
         {/* Placeholder after the last card */}
-        {dropIndex === tasks.length && (
+        {dropIndex === tasks.length && !isNoOpDrop(tasks.length) && (
           <div style={DROP_PLACEHOLDER} onDragOver={(e) => e.preventDefault()} />
         )}
 
