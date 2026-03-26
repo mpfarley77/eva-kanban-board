@@ -15,9 +15,11 @@ function isOptionalColMissing(msg: string) {
 function sortTasks(tasks: TaskOut[]) {
   return [...tasks].sort((a, b) => {
     if (a.status !== b.status) return 0;
-    if (a.status === "backlog") {
-      return (a.sort_order ?? 9999) - (b.sort_order ?? 9999);
-    }
+    // Sort by sort_order for all columns. Tasks without a sort_order (not yet
+    // manually reordered) fall back to newest-updated-first.
+    if (a.sort_order != null && b.sort_order != null) return a.sort_order - b.sort_order;
+    if (a.sort_order != null) return -1;
+    if (b.sort_order != null) return 1;
     return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
   });
 }
