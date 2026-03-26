@@ -654,8 +654,8 @@ export default function KanbanBoard() {
     const clampedIdx = Math.min(Math.max(toIndex, 0), colTasks.length);
     colTasks.splice(clampedIdx, 0, { ...target, status: colKey });
 
-    // Assign consecutive sort_orders to every task in the column.
-    const updates = colTasks.map((t, i) => ({ id: t.id, sort_order: (i + 1) * 1000 }));
+    // Assign consecutive sort_orders (10, 20, 30, …) to every task in the column.
+    const updates = colTasks.map((t, i) => ({ id: t.id, sort_order: (i + 1) * 10 }));
 
     const previous = tasks;
     setTasks((prev) =>
@@ -687,13 +687,13 @@ export default function KanbanBoard() {
     const colTasks = [...grouped[colKey]];
     const fromIdx = colTasks.findIndex((t) => t.id === taskId);
     if (fromIdx < 0) return;
-    // Remove the dragged task then insert at the adjusted position.
+    // toIndex is in "without-card" space (KanbanColumn excludes the dragged card
+    // from renderTasks), so splicing directly after removal needs no adjustment.
     const [moved] = colTasks.splice(fromIdx, 1);
-    const insertAt = toIndex > fromIdx ? toIndex - 1 : toIndex;
-    colTasks.splice(insertAt, 0, moved);
+    colTasks.splice(toIndex, 0, moved);
 
-    // Assign consecutive sort_orders (spaced by 1000) to every task in the column.
-    const updates = colTasks.map((t, i) => ({ id: t.id, sort_order: (i + 1) * 1000 }));
+    // Assign consecutive sort_orders (10, 20, 30, …) to every task in the column.
+    const updates = colTasks.map((t, i) => ({ id: t.id, sort_order: (i + 1) * 10 }));
 
     const previous = tasks;
     setTasks((prev) =>
