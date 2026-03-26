@@ -642,6 +642,45 @@ export default function KanbanBoard() {
     }
   };
 
+  const dropAtIndex = async (taskId: string, colKey: Status, toIndex: number) => {
+    const target = tasks.find((t) => t.id === taskId);
+    if (!target) return;
+
+    // Build the target column's current task list (task not yet in it) and
+    // insert the incoming task at the requested position.
+    const colTasks = [...grouped[colKey]];
+    const clampedIdx = Math.min(Math.max(toIndex, 0), colTasks.length);
+    colTasks.splice(clampedIdx, 0, { ...target, status: colKey });
+
+    // Assign consecutive sort_orders to every task in the column.
+    const updates = colTasks.map((t, i) => ({ id: t.id, sort_order: (i + 1) * 1000 }));
+
+    const previous = tasks;
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.id === taskId) return { ...t, status: colKey };
+        const u = updates.find((u) => u.id === t.id);
+        return u ? { ...t, sort_order: u.sort_order } : t;
+      })
+    );
+
+    try {
+      // Patch status + sort_order for the moved task, sort_order only for others.
+      const movedOrder = updates.find((u) => u.id === taskId)!.sort_order;
+      await patchTask(taskId, { status: colKey, sort_order: movedOrder });
+      await Promise.all(
+        updates
+          .filter((u) => u.id !== taskId)
+          .map((u) => patchTask(u.id, { sort_order: u.sort_order }))
+      );
+      const colLabel = colKey.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      showToast(`"${target.title}" moved to ${colLabel}`);
+    } catch (e: unknown) {
+      setTasks(previous);
+      setError(e instanceof Error ? e.message : "Move failed");
+    }
+  };
+
   const reorderInColumn = async (taskId: string, colKey: Status, toIndex: number) => {
     const colTasks = [...grouped[colKey]];
     const fromIdx = colTasks.findIndex((t) => t.id === taskId);
@@ -1107,6 +1146,7 @@ export default function KanbanBoard() {
             onReorderUp={(taskId) => void reorderBacklog(taskId, "up")}
             onReorderDown={(taskId) => void reorderBacklog(taskId, "down")}
             onReorderInColumn={(taskId, toIndex) => void reorderInColumn(taskId, col.key, toIndex)}
+            onDropAtIndex={(taskId, toIndex) => void dropAtIndex(taskId, col.key, toIndex)}
             onDelete={(taskId) => deleteTask(taskId)}
           />
         ))}

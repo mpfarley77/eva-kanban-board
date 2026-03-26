@@ -46,6 +46,7 @@ type Props = {
   onReorderUp: (taskId: string) => void;
   onReorderDown: (taskId: string) => void;
   onReorderInColumn: (taskId: string, toIndex: number) => void;
+  onDropAtIndex: (taskId: string, toIndex: number) => void;
   onDelete: (taskId: string) => void;
   noHeader?: boolean;
   bodyMinHeight?: string;
@@ -77,6 +78,7 @@ export default function KanbanColumn({
   onReorderUp,
   onReorderDown,
   onReorderInColumn,
+  onDropAtIndex,
   onDelete,
   noHeader,
   bodyMinHeight,
@@ -84,7 +86,7 @@ export default function KanbanColumn({
   const headerColor = HEADER_COLORS[colKey];
   const [dropIndex, setDropIndex] = useState<number | null>(null);
 
-  // True when the card being dragged originates from this column.
+  // True when the dragged card originates from this column.
   const isDraggingWithin =
     draggingTaskId !== null && tasks.some((t) => t.id === draggingTaskId);
 
@@ -93,6 +95,7 @@ export default function KanbanColumn({
       className="kb-col"
       style={{
         borderRadius: noHeader ? "0 0 12px 12px" : 12,
+        // Only tint the background for cross-column drops; intra-column uses the placeholder.
         background:
           isDropTarget && !isDraggingWithin
             ? "rgba(179, 212, 255, 0.55)"
@@ -100,7 +103,13 @@ export default function KanbanColumn({
         transition: "background 0.15s",
         minHeight: bodyMinHeight,
       }}
-      onDragOver={(e) => { e.preventDefault(); onDragOver(); }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        onDragOver();
+        // Default drop position is after the last card; overridden when cursor
+        // enters a specific card's wrapper div below.
+        if (dropIndex === null) setDropIndex(tasks.length);
+      }}
       onDragLeave={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
           onDragLeave();
@@ -110,11 +119,12 @@ export default function KanbanColumn({
       onDrop={(e) => {
         e.preventDefault();
         const taskId = e.dataTransfer.getData("text/task-id");
-        if (!taskId) return;
-        if (isDraggingWithin && dropIndex !== null) {
-          onReorderInColumn(taskId, dropIndex);
+        if (!taskId) { setDropIndex(null); return; }
+        const idx = dropIndex ?? tasks.length;
+        if (isDraggingWithin) {
+          onReorderInColumn(taskId, idx);
         } else {
-          onDrop(taskId);
+          onDropAtIndex(taskId, idx);
         }
         setDropIndex(null);
       }}
@@ -132,36 +142,12 @@ export default function KanbanColumn({
             gap: 8,
           }}
         >
-          <span
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              color: "#fff",
-              textTransform: "uppercase",
-              letterSpacing: "0.5px",
-            }}
-          >
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#fff", textTransform: "uppercase", letterSpacing: "0.5px" }}>
             {label}
           </span>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span
-              style={{
-                width: 22,
-                height: 22,
-                borderRadius: "50%",
-                background: "rgba(255,255,255,0.3)",
-                color: "#fff",
-                fontSize: 11,
-                fontWeight: 700,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              {tasks.length}
-            </span>
-          </div>
+          <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(255,255,255,0.3)", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            {tasks.length}
+          </span>
         </div>
       )}
 
@@ -170,8 +156,8 @@ export default function KanbanColumn({
         {tasks.flatMap((task, idx) => {
           const items: React.ReactNode[] = [];
 
-          // Placeholder above this card when dragging within the column.
-          if (isDraggingWithin && dropIndex === idx) {
+          // Positional placeholder — same style for both intra and cross-column drags.
+          if (dropIndex === idx) {
             items.push(
               <div key={`ph-${idx}`} style={DROP_PLACEHOLDER}
                 onDragOver={(e) => e.preventDefault()} />
@@ -182,7 +168,6 @@ export default function KanbanColumn({
             <div
               key={task.id}
               onDragOver={(e) => {
-                if (!isDraggingWithin) return;
                 e.preventDefault();
                 const rect = e.currentTarget.getBoundingClientRect();
                 setDropIndex(e.clientY < rect.top + rect.height / 2 ? idx : idx + 1);
@@ -217,26 +202,14 @@ export default function KanbanColumn({
           return items;
         })}
 
-        {/* Placeholder at the end of the list */}
-        {isDraggingWithin && dropIndex === tasks.length && (
+        {/* Placeholder after the last card */}
+        {dropIndex === tasks.length && (
           <div style={DROP_PLACEHOLDER} onDragOver={(e) => e.preventDefault()} />
         )}
 
-        {tasks.length === 0 && !isDropTarget && (
+        {/* "No tasks" — hidden while a drag is in progress over this column */}
+        {tasks.length === 0 && dropIndex === null && (
           <p style={{ fontSize: 13, color: "#5E6C84", padding: "4px 4px" }}>No tasks</p>
-        )}
-
-        {/* Between-column drop indicator — only when dragging from another column */}
-        {isDropTarget && !isDraggingWithin && (
-          <div
-            style={{
-              border: "2px dashed #0079BF",
-              background: "rgba(0, 121, 191, 0.08)",
-              borderRadius: 8,
-              height: 72,
-              flexShrink: 0,
-            }}
-          />
         )}
       </div>
     </div>
