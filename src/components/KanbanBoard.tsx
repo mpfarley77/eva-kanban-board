@@ -660,8 +660,8 @@ export default function KanbanBoard() {
     const previous = tasks;
     setTasks((prev) =>
       prev.map((t) => {
-        if (t.id === taskId) return { ...t, status: colKey };
         const u = updates.find((u) => u.id === t.id);
+        if (t.id === taskId) return { ...t, status: colKey, sort_order: u!.sort_order };
         return u ? { ...t, sort_order: u.sort_order } : t;
       })
     );
