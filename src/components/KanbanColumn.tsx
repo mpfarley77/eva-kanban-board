@@ -90,21 +90,15 @@ export default function KanbanColumn({
   const isDraggingWithin =
     draggingTaskId !== null && tasks.some((t) => t.id === draggingTaskId);
 
-  // Index of the card being dragged within the full task list (−1 if cross-column).
+  // Index of the card being dragged within this column's task list (−1 if cross-column).
   const fromIdx = isDraggingWithin
     ? tasks.findIndex((t) => t.id === draggingTaskId)
     : -1;
 
-  // For within-column drags, render the list WITHOUT the dragged card so that
-  // dropIndex is a direct 1-to-1 splice index — no adjustment needed in the handler.
-  // For cross-column drags the target column never contains the card, so no change.
-  const renderTasks = (isDraggingWithin && draggingTaskId)
-    ? tasks.filter((t) => t.id !== draggingTaskId)
-    : tasks;
-
-  // No-op: in "without-card" space, splicing back at fromIdx leaves the order
-  // unchanged. Suppress the placeholder there so the user gets no false affordance.
-  const isNoOpDrop = (idx: number) => isDraggingWithin && idx === fromIdx;
+  // For same-column drags, dropping at fromIdx (above the card) or fromIdx+1 (below
+  // the card) would leave the order unchanged — don't show a placeholder there.
+  const isNoOpDrop = (idx: number) =>
+    isDraggingWithin && (idx === fromIdx || idx === fromIdx + 1);
 
   return (
     <div
@@ -122,9 +116,9 @@ export default function KanbanColumn({
       onDragOver={(e) => {
         e.preventDefault();
         onDragOver();
-        // Default drop position is after the last rendered card; overridden when
-        // cursor enters a specific card's wrapper div below.
-        if (dropIndex === null) setDropIndex(renderTasks.length);
+        // Default drop position is after the last card; overridden when cursor
+        // enters a specific card's wrapper div below.
+        if (dropIndex === null) setDropIndex(tasks.length);
       }}
       onDragLeave={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
@@ -136,9 +130,10 @@ export default function KanbanColumn({
         e.preventDefault();
         const taskId = e.dataTransfer.getData("text/task-id");
         if (!taskId) { setDropIndex(null); return; }
-        // dropIndex IS the splice index — same value that positioned the placeholder.
-        const idx = dropIndex ?? renderTasks.length;
+        const idx = dropIndex ?? tasks.length;
         if (isDraggingWithin) {
+          // Skip the API call when the drop position is adjacent to the card's
+          // current position — the order would be unchanged.
           if (!isNoOpDrop(idx)) onReorderInColumn(taskId, idx);
         } else {
           onDropAtIndex(taskId, idx);
@@ -170,7 +165,7 @@ export default function KanbanColumn({
 
       {/* Column body */}
       <div style={{ padding: "10px 8px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-        {renderTasks.flatMap((task, idx) => {
+        {tasks.flatMap((task, idx) => {
           const items: React.ReactNode[] = [];
 
           // Positional placeholder — hidden when the drop would be a no-op.
@@ -187,8 +182,6 @@ export default function KanbanColumn({
               onDragOver={(e) => {
                 e.preventDefault();
                 const rect = e.currentTarget.getBoundingClientRect();
-                // idx here is already in "without-card" space (renderTasks excludes
-                // the dragged card for within-column drags), so no adjustment needed.
                 setDropIndex(e.clientY < rect.top + rect.height / 2 ? idx : idx + 1);
               }}
             >
@@ -196,9 +189,9 @@ export default function KanbanColumn({
                 task={task}
                 colKey={colKey}
                 isFirst={idx === 0}
-                isLast={idx === renderTasks.length - 1}
+                isLast={idx === backlogLength - 1}
                 compactCards={compactCards}
-                isDragging={false}
+                isDragging={draggingTaskId === task.id}
                 nowTs={nowTs}
                 showRelativeTimes={showRelativeTimes}
                 onDragStart={() => onDragStart(task.id)}
@@ -222,12 +215,12 @@ export default function KanbanColumn({
         })}
 
         {/* Placeholder after the last card */}
-        {dropIndex === renderTasks.length && !isNoOpDrop(renderTasks.length) && (
+        {dropIndex === tasks.length && !isNoOpDrop(tasks.length) && (
           <div style={DROP_PLACEHOLDER} onDragOver={(e) => e.preventDefault()} />
         )}
 
         {/* "No tasks" — hidden while a drag is in progress over this column */}
-        {renderTasks.length === 0 && dropIndex === null && (
+        {tasks.length === 0 && dropIndex === null && (
           <p style={{ fontSize: 13, color: "#5E6C84", padding: "4px 4px" }}>No tasks</p>
         )}
       </div>
