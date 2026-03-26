@@ -657,6 +657,9 @@ export default function KanbanBoard() {
     // Assign consecutive sort_orders to every task in the column.
     const updates = colTasks.map((t, i) => ({ id: t.id, sort_order: (i + 1) * 1000 }));
 
+    console.log("AFTER INSERT - tasks in target column:", colTasks.map((t, i) => i + ": " + t.title));
+    console.log("SORT ORDERS:", updates.map((u, i) => colTasks[i].title + " = " + u.sort_order));
+
     const previous = tasks;
     setTasks((prev) =>
       prev.map((t) => {
