@@ -36,10 +36,6 @@ type Props = {
   onCompactCardsChange: (v: boolean) => void;
   showBackgroundPanel: boolean;
   onShowBackgroundPanelChange: (v: boolean) => void;
-  showTopUrgentPanel: boolean;
-  onShowTopUrgentPanelChange: (v: boolean) => void;
-  showTipsPanel: boolean;
-  onShowTipsPanelChange: (v: boolean) => void;
   visibleCount: number;
   totalCount: number;
   riskSummary: RiskSummary;
@@ -132,10 +128,6 @@ export default function FilterBar({
   onCompactCardsChange,
   showBackgroundPanel,
   onShowBackgroundPanelChange,
-  showTopUrgentPanel,
-  onShowTopUrgentPanelChange,
-  showTipsPanel,
-  onShowTipsPanelChange,
   visibleCount,
   totalCount,
   riskSummary,
@@ -198,8 +190,6 @@ export default function FilterBar({
             { checked: showRelativeTimes,   onChange: onShowRelativeTimesChange,   label: "Relative times" },
             { checked: compactCards,        onChange: onCompactCardsChange,        label: "Compact cards" },
             { checked: showBackgroundPanel, onChange: onShowBackgroundPanelChange, label: "Background panel" },
-            { checked: showTopUrgentPanel,  onChange: onShowTopUrgentPanelChange,  label: "Top urgent" },
-            { checked: showTipsPanel,       onChange: onShowTipsPanelChange,       label: "Tips" },
           ] satisfies { checked: boolean; onChange: (v: boolean) => void; label: string }[]
         ).map(({ checked, onChange, label }) => (
           <label key={label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#5E6C84", cursor: "pointer" }}>

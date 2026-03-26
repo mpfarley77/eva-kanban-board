@@ -42,9 +42,7 @@ export default function KanbanBoard() {
   const [showRelativeTimes, setShowRelativeTimes] = useState(true);
   const [compactCards, setCompactCards] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
-  const [showTipsPanel, setShowTipsPanel] = useState(false);
   const [showBackgroundPanel, setShowBackgroundPanel] = useState(true);
-  const [showTopUrgentPanel, setShowTopUrgentPanel] = useState(true);
   const [localProjects, setLocalProjects] = useState<string[]>([]);
   const [showAddTaskNewProject, setShowAddTaskNewProject] = useState(false);
   const [newProjectDraft, setNewProjectDraft] = useState("");
@@ -153,9 +151,7 @@ export default function KanbanBoard() {
     const savedRelativeTimes = window.localStorage.getItem("kb_show_relative_times") ?? "1";
     const savedCompactCards = window.localStorage.getItem("kb_compact_cards") ?? "0";
     const savedShowBackgroundPanel = window.localStorage.getItem("kb_show_background_panel") ?? "1";
-    const savedShowTopUrgentPanel = window.localStorage.getItem("kb_show_top_urgent_panel") ?? "1";
     const savedShowShortcutsHelp = window.localStorage.getItem("kb_show_shortcuts_help") ?? "0";
-    const savedShowTipsPanel = window.localStorage.getItem("kb_show_tips_panel") ?? "0";
     const savedDraftTitle = window.localStorage.getItem("kb_draft_title") ?? "";
     const savedDraftProject = window.localStorage.getItem("kb_draft_project") ?? "";
     const savedDraftObjectiveRaw = window.localStorage.getItem("kb_draft_objective") ?? "skyworks";
@@ -193,9 +189,7 @@ export default function KanbanBoard() {
     setShowRelativeTimes(savedRelativeTimes !== "0");
     setCompactCards(savedCompactCards === "1");
     setShowBackgroundPanel(savedShowBackgroundPanel !== "0");
-    setShowTopUrgentPanel(savedShowTopUrgentPanel !== "0");
     setShowShortcutsHelp(savedShowShortcutsHelp === "1");
-    setShowTipsPanel(savedShowTipsPanel === "1");
     setTitle(savedDraftTitle);
     setProject(savedDraftProject);
     setObjective(savedDraftObjective);
@@ -256,16 +250,8 @@ export default function KanbanBoard() {
   }, [showBackgroundPanel]);
 
   useEffect(() => {
-    window.localStorage.setItem("kb_show_top_urgent_panel", showTopUrgentPanel ? "1" : "0");
-  }, [showTopUrgentPanel]);
-
-  useEffect(() => {
     window.localStorage.setItem("kb_show_shortcuts_help", showShortcutsHelp ? "1" : "0");
   }, [showShortcutsHelp]);
-
-  useEffect(() => {
-    window.localStorage.setItem("kb_show_tips_panel", showTipsPanel ? "1" : "0");
-  }, [showTipsPanel]);
 
   useEffect(() => {
     if (!error) return;
@@ -419,26 +405,6 @@ export default function KanbanBoard() {
 
     return { atRisk, watch, normal, dueSoon, blocked, staleInProgress };
   }, [visibleTasks, nowTs]);
-
-  const topUrgentTasks = useMemo(() => {
-    return visibleTasks
-      .filter((t) => t.status !== "completed")
-      .sort((a, b) => {
-        const riskRank = { at_risk: 0, blocked: 1, watch: 2, normal: 3 } as const;
-        const ar = riskRank[(a.risk_state ?? "normal") as keyof typeof riskRank] ?? 2;
-        const br = riskRank[(b.risk_state ?? "normal") as keyof typeof riskRank] ?? 2;
-        if (ar !== br) return ar - br;
-
-        const aBlocked = (a.blocked_reason ?? "").trim() ? 0 : 1;
-        const bBlocked = (b.blocked_reason ?? "").trim() ? 0 : 1;
-        if (aBlocked !== bBlocked) return aBlocked - bBlocked;
-
-        const aEta = a.eta ? Date.parse(a.eta) : Number.POSITIVE_INFINITY;
-        const bEta = b.eta ? Date.parse(b.eta) : Number.POSITIVE_INFINITY;
-        return aEta - bEta;
-      })
-      .slice(0, 3);
-  }, [visibleTasks]);
 
   const handleNewProject = (name: string) => {
     const trimmed = name.trim();
@@ -771,14 +737,6 @@ export default function KanbanBoard() {
       `Filters: project=${projectFilter}, objective=${objectiveFilter}, risk=${riskFilter}, time=${timeFilter}, search=${searchQuery.trim() || "(none)"}`,
       `Columns: backlog=${statusCounts.backlog}, in_progress=${statusCounts.inProgress}, review=${statusCounts.review}, blocked=${statusCounts.blocked}, completed=${statusCounts.completed}`,
       `Risk: at_risk=${riskSummary.atRisk}, watch=${riskSummary.watch}, blocked=${riskSummary.blocked}, due_24h=${riskSummary.dueSoon}, stale_in_progress=${riskSummary.staleInProgress}`,
-      `Top urgent:`,
-      ...(topUrgentTasks.length
-        ? topUrgentTasks.map((t) => {
-            const blocked = (t.blocked_reason ?? "").trim() ? " [BLOCKED]" : "";
-            const due = t.eta ? ` eta=${new Date(t.eta).toLocaleString()}` : "";
-            return `- ${t.title} [${t.priority}] (${t.status})${blocked}${due}`;
-          })
-        : ["- none"]),
     ].join("\n");
 
     try {
@@ -821,9 +779,7 @@ export default function KanbanBoard() {
     window.localStorage.removeItem("kb_show_relative_times");
     window.localStorage.removeItem("kb_compact_cards");
     window.localStorage.removeItem("kb_show_background_panel");
-    window.localStorage.removeItem("kb_show_top_urgent_panel");
     window.localStorage.removeItem("kb_show_shortcuts_help");
-    window.localStorage.removeItem("kb_show_tips_panel");
     window.localStorage.removeItem("kb_bg_image_url");
     window.localStorage.removeItem("kb_bg_overlay");
   };
@@ -926,18 +882,6 @@ export default function KanbanBoard() {
                 <span style={{ color: "#5E6C84" }}>{desc}</span>
               </li>
             ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {showSettings && showTipsPanel ? (
-        <section style={panelStyle}>
-          <h2 style={panelHeading}>Quick Tips</h2>
-          <ul style={{ fontSize: 13, color: "#5E6C84", display: "flex", flexDirection: "column", gap: 4, paddingLeft: 18, margin: 0 }}>
-            <li>Click risk/time summary chips to instantly filter down to problem tasks.</li>
-            <li>Use Top Urgent "Start" to move the most important task into In Progress.</li>
-            <li>Use Reset View if the board gets too filtered/customized.</li>
-            <li>Use Export CSV for spreadsheet sharing and Copy Summary for chat updates.</li>
           </ul>
         </section>
       ) : null}
@@ -1074,44 +1018,11 @@ export default function KanbanBoard() {
           onCompactCardsChange={setCompactCards}
           showBackgroundPanel={showBackgroundPanel}
           onShowBackgroundPanelChange={setShowBackgroundPanel}
-          showTopUrgentPanel={showTopUrgentPanel}
-          onShowTopUrgentPanelChange={setShowTopUrgentPanel}
-          showTipsPanel={showTipsPanel}
-          onShowTipsPanelChange={setShowTipsPanel}
           visibleCount={visibleTasks.length}
           totalCount={tasks.length}
           riskSummary={riskSummary}
         />
 
-        {showTopUrgentPanel ? (
-          <div style={{ background: "#F4F5F7", border: "1px solid #DFE1E6", borderRadius: 8, padding: "10px 12px" }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: "#172B4D", marginBottom: 6 }}>Top Urgent (filtered view)</p>
-            {topUrgentTasks.length === 0 ? (
-              <p style={{ fontSize: 12, color: "#7A869A", margin: 0 }}>No urgent tasks in current view.</p>
-            ) : (
-              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-                {topUrgentTasks.map((t) => (
-                  <li key={t.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <button
-                      style={{ flex: 1, textAlign: "left", background: "none", border: "none", fontSize: 12, color: "#172B4D", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                      onClick={() => { setSearchQuery(t.title); searchInputRef.current?.focus(); }}
-                    >
-                      • {t.title} [{t.priority}] ({t.status})
-                    </button>
-                    {t.status !== "in_progress" && t.status !== "completed" ? (
-                      <button
-                        style={{ background: "#E6F0FF", border: "1px solid #B3D4FF", borderRadius: 3, color: "#0052CC", fontSize: 11, fontWeight: 600, padding: "2px 8px", cursor: "pointer", flexShrink: 0 }}
-                        onClick={() => void moveTask(t.id, "in_progress")}
-                      >
-                        Start
-                      </button>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        ) : null}
         {error ? <p style={{ fontSize: 13, color: "#BF2600", margin: 0 }}>{error}</p> : null}
         </>}
           </section>
