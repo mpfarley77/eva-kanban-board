@@ -20,7 +20,7 @@ function sortTasks(tasks: TaskOut[]) {
     if (a.sort_order != null && b.sort_order != null) return a.sort_order - b.sort_order;
     if (a.sort_order != null) return -1;
     if (b.sort_order != null) return 1;
-    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    return 0;
   });
 }
 
@@ -32,7 +32,7 @@ export async function GET() {
     .from("tasks")
     .select("id,title,project,objective,status,priority,sort_order,owner,started_at,eta,blocked_reason,last_update_at,risk_state,created_at,updated_at")
     .eq("owner", OWNER)
-    .order("created_at", { ascending: false });
+    .order("sort_order", { ascending: true });
 
   if (!full.error) {
     return NextResponse.json({ tasks: sortTasks(full.data ?? []) });
@@ -46,7 +46,7 @@ export async function GET() {
     .from("tasks")
     .select("id,title,objective,status,priority,sort_order,owner,started_at,eta,blocked_reason,last_update_at,risk_state,created_at,updated_at")
     .eq("owner", OWNER)
-    .order("created_at", { ascending: false });
+    .order("sort_order", { ascending: true });
 
   if (fallback.error) return NextResponse.json({ error: fallback.error.message }, { status: 500 });
   const tasks = (fallback.data ?? []).map((t) => ({ ...t, project: null }));

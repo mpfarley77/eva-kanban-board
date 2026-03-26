@@ -84,6 +84,7 @@ export default function KanbanColumn({
   bodyMinHeight,
 }: Props) {
   const headerColor = HEADER_COLORS[colKey];
+
   const [dropIndex, setDropIndex] = useState<number | null>(null);
 
   // True when the dragged card originates from this column.

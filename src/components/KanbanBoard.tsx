@@ -371,12 +371,12 @@ export default function KanbanBoard() {
   const grouped = useMemo(() => {
     const sorted = [...visibleTasks].sort((a, b) => {
       if (a.status !== b.status) return 0;
-      // Use sort_order for all columns when available (set by drag-reorder).
-      // Tasks without sort_order fall back to newest-updated-first.
+      // Sort exclusively by sort_order. Tasks with no sort_order stay in
+      // their existing relative order (return 0 = stable).
       if (a.sort_order != null && b.sort_order != null) return a.sort_order - b.sort_order;
       if (a.sort_order != null) return -1;
       if (b.sort_order != null) return 1;
-      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      return 0;
     });
 
     return COLUMNS.reduce<Record<Status, Task[]>>(
@@ -656,9 +656,6 @@ export default function KanbanBoard() {
 
     // Assign consecutive sort_orders to every task in the column.
     const updates = colTasks.map((t, i) => ({ id: t.id, sort_order: (i + 1) * 1000 }));
-
-    console.log("AFTER INSERT - tasks in target column:", colTasks.map((t, i) => i + ": " + t.title));
-    console.log("SORT ORDERS:", updates.map((u, i) => colTasks[i].title + " = " + u.sort_order));
 
     const previous = tasks;
     setTasks((prev) =>
