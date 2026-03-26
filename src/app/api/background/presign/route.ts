@@ -19,7 +19,7 @@ export async function POST() {
 
   const { data, error } = await supabase.storage
     .from(BUCKET)
-    .createSignedUploadUrl(PATH, { upsertEnabled: true });
+    .createSignedUploadUrl(PATH, { upsert: true });
 
   if (error || !data) {
     return NextResponse.json({ error: error?.message ?? "Failed to create signed URL" }, { status: 500 });
