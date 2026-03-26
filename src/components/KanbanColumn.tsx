@@ -14,9 +14,9 @@ export const HEADER_COLORS: Record<Status, string> = {
 
 const DROP_PLACEHOLDER: React.CSSProperties = {
   border: "2px dashed #0079BF",
-  background: "rgba(0, 121, 191, 0.08)",
-  borderRadius: 4,
-  height: 4,
+  background: "rgba(0, 121, 191, 0.1)",
+  borderRadius: 8,
+  minHeight: 44,
   flexShrink: 0,
 };
 
@@ -170,9 +170,12 @@ export default function KanbanColumn({
         {tasks.flatMap((task, idx) => {
           const items: React.ReactNode[] = [];
 
-          // Thin placeholder above this card when dragging within the column.
+          // Placeholder above this card when dragging within the column.
           if (isDraggingWithin && dropIndex === idx) {
-            items.push(<div key={`ph-${idx}`} style={DROP_PLACEHOLDER} />);
+            items.push(
+              <div key={`ph-${idx}`} style={DROP_PLACEHOLDER}
+                onDragOver={(e) => e.preventDefault()} />
+            );
           }
 
           items.push(
@@ -216,7 +219,7 @@ export default function KanbanColumn({
 
         {/* Placeholder at the end of the list */}
         {isDraggingWithin && dropIndex === tasks.length && (
-          <div style={DROP_PLACEHOLDER} />
+          <div style={DROP_PLACEHOLDER} onDragOver={(e) => e.preventDefault()} />
         )}
 
         {tasks.length === 0 && !isDropTarget && (
