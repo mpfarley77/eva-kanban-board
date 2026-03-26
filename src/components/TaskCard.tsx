@@ -216,190 +216,199 @@ export default function TaskCard({
       {/* ── Card content ── */}
       <div style={{ flex: 1, minWidth: 0 }}>
 
-      {/* ── Color label strips ── */}
-      <div style={{ display: "flex", gap: 4, padding: "8px 10px 0" }}>
-        <div style={{ height: 8, minWidth: 40, flex: 1, borderRadius: 4, background: obj.stripColor }} />
-        <div style={{ height: 8, minWidth: 40, flex: 1, borderRadius: 4, background: priorityColor }} />
-      </div>
+      {/* ── Color label strips — hidden in compact mode ── */}
+      {!compactCards && (
+        <div style={{ display: "flex", gap: 4, padding: "8px 10px 0" }}>
+          <div style={{ height: 8, minWidth: 40, flex: 1, borderRadius: 4, background: obj.stripColor }} />
+          <div style={{ height: 8, minWidth: 40, flex: 1, borderRadius: 4, background: priorityColor }} />
+        </div>
+      )}
 
       {/* ── Card body ── */}
-      <div style={{ padding: compactCards ? "6px 10px 8px" : "8px 10px 10px", display: "flex", flexDirection: "column", gap }}>
+      {/* In compact mode add right padding to keep title text clear of the trash icon */}
+      <div style={{ padding: compactCards ? "6px 30px 6px 10px" : "8px 10px 10px", display: "flex", flexDirection: "column", gap }}>
 
         {/* Title row */}
         <p style={{ fontSize: 14, fontWeight: 600, color: "#172B4D", lineHeight: 1.3, margin: 0 }}>
           {task.title}
         </p>
 
-        {/* Meta row: priority pill + objective tag + badges */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
-          {/* Priority pill — click to change */}
-          <div style={{ position: "relative", display: "inline-flex" }}>
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowPriorityPicker((v) => !v); }}
-              style={{
-                fontSize: 10, fontWeight: 700, color: "#fff",
-                background: priorityColor, borderRadius: 3, padding: "2px 6px",
-                border: "none", cursor: "pointer",
-                boxShadow: showPriorityPicker ? "0 0 0 2px rgba(255,255,255,0.6), 0 0 0 3px rgba(0,0,0,0.25)" : "none",
-                transition: "box-shadow 0.1s, filter 0.1s",
-              }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.filter = "brightness(1.15)"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.filter = ""; }}
-            >
-              {task.priority}
-            </button>
-            {showPriorityPicker && (
-              <>
-                <div
-                  style={{ position: "fixed", inset: 0, zIndex: 100 }}
-                  onClick={() => setShowPriorityPicker(false)}
-                />
-                <div style={{
-                  position: "absolute",
-                  top: "calc(100% + 5px)",
-                  left: 0,
-                  zIndex: 101,
-                  background: "#fff",
-                  border: "1px solid #DFE1E6",
-                  borderRadius: 6,
-                  padding: 5,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 4,
-                  boxShadow: "0 4px 14px rgba(0,0,0,0.15)",
-                  minWidth: 48,
-                }}>
-                  {PRIORITIES.map((p) => (
-                    <button
-                      key={p}
-                      onClick={(e) => { e.stopPropagation(); onSetPriority(p); setShowPriorityPicker(false); }}
-                      style={{
-                        background: PRIORITY_COLORS[p],
-                        color: "#fff",
-                        border: p === task.priority ? "2px solid rgba(0,0,0,0.25)" : "2px solid transparent",
-                        borderRadius: 3,
-                        fontSize: 10,
-                        fontWeight: 700,
-                        padding: "3px 8px",
-                        cursor: "pointer",
-                        textAlign: "center",
-                        opacity: p === task.priority ? 1 : 0.8,
-                      }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = p === task.priority ? "1" : "0.8"; }}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              </>
+        {/* Meta row: priority pill + objective tag + badges — hidden in compact mode */}
+        {!compactCards && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+            {/* Priority pill — click to change */}
+            <div style={{ position: "relative", display: "inline-flex" }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowPriorityPicker((v) => !v); }}
+                style={{
+                  fontSize: 10, fontWeight: 700, color: "#fff",
+                  background: priorityColor, borderRadius: 3, padding: "2px 6px",
+                  border: "none", cursor: "pointer",
+                  boxShadow: showPriorityPicker ? "0 0 0 2px rgba(255,255,255,0.6), 0 0 0 3px rgba(0,0,0,0.25)" : "none",
+                  transition: "box-shadow 0.1s, filter 0.1s",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.filter = "brightness(1.15)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.filter = ""; }}
+              >
+                {task.priority}
+              </button>
+              {showPriorityPicker && (
+                <>
+                  <div
+                    style={{ position: "fixed", inset: 0, zIndex: 100 }}
+                    onClick={() => setShowPriorityPicker(false)}
+                  />
+                  <div style={{
+                    position: "absolute",
+                    top: "calc(100% + 5px)",
+                    left: 0,
+                    zIndex: 101,
+                    background: "#fff",
+                    border: "1px solid #DFE1E6",
+                    borderRadius: 6,
+                    padding: 5,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
+                    boxShadow: "0 4px 14px rgba(0,0,0,0.15)",
+                    minWidth: 48,
+                  }}>
+                    {PRIORITIES.map((p) => (
+                      <button
+                        key={p}
+                        onClick={(e) => { e.stopPropagation(); onSetPriority(p); setShowPriorityPicker(false); }}
+                        style={{
+                          background: PRIORITY_COLORS[p],
+                          color: "#fff",
+                          border: p === task.priority ? "2px solid rgba(0,0,0,0.25)" : "2px solid transparent",
+                          borderRadius: 3,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          padding: "3px 8px",
+                          cursor: "pointer",
+                          textAlign: "center",
+                          opacity: p === task.priority ? 1 : 0.8,
+                        }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = p === task.priority ? "1" : "0.8"; }}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Objective tag */}
+            <span style={{
+              fontSize: 10, fontWeight: 600,
+              background: obj.tagBg, color: obj.tagText,
+              borderRadius: 3, padding: "2px 6px",
+            }}>
+              {obj.label}
+            </span>
+
+            {/* Risk badges */}
+            {task.risk_state === "at_risk" && (
+              <span style={{ fontSize: 10, fontWeight: 600, background: "#FFEBE6", color: "#BF2600", borderRadius: 3, padding: "2px 6px" }}>AT RISK</span>
+            )}
+            {task.risk_state === "watch" && (
+              <span style={{ fontSize: 10, fontWeight: 600, background: "#FFFAE6", color: "#974F0C", borderRadius: 3, padding: "2px 6px" }}>WATCH</span>
+            )}
+            {(task.blocked_reason ?? "").trim() && (
+              <span style={{ fontSize: 10, fontWeight: 600, background: "#EAE6FF", color: "#403294", borderRadius: 3, padding: "2px 6px" }}>BLOCKED</span>
+            )}
+
+            {/* ETA badge */}
+            {task.eta && (
+              <span style={{ fontSize: 10, fontWeight: 600, background: "#E6F0FF", color: "#0052CC", borderRadius: 3, padding: "2px 6px" }}>
+                ETA {new Date(task.eta).toLocaleDateString()}
+              </span>
+            )}
+
+            {/* Stale badge */}
+            {isStale && (
+              <span style={{ fontSize: 10, fontWeight: 600, background: "#FFF3E0", color: "#BF360C", borderRadius: 3, padding: "2px 6px" }}>STALE &gt;48H</span>
             )}
           </div>
+        )}
 
-          {/* Objective tag */}
-          <span style={{
-            fontSize: 10, fontWeight: 600,
-            background: obj.tagBg, color: obj.tagText,
-            borderRadius: 3, padding: "2px 6px",
-          }}>
-            {obj.label}
-          </span>
+        {/* ── Controls — hidden in compact mode ── */}
+        {!compactCards && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+              <label style={labelStyle}>Project</label>
+              {showNewProjectInput ? (
+                <>
+                  <input
+                    autoFocus
+                    value={newProjectDraft}
+                    onChange={(e) => setNewProjectDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { e.preventDefault(); saveNewProject(); }
+                      if (e.key === "Escape") { setShowNewProjectInput(false); setNewProjectDraft(""); }
+                    }}
+                    placeholder="New project name"
+                    style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+                  />
+                  <button onClick={saveNewProject} style={{ ...actionBtnStyle, padding: "2px 8px", fontSize: 11, flexShrink: 0 }}>Save</button>
+                  <button onClick={() => { setShowNewProjectInput(false); setNewProjectDraft(""); }} style={{ ...actionBtnStyle, padding: "2px 8px", fontSize: 11, flexShrink: 0 }}>✕</button>
+                </>
+              ) : (
+                <select
+                  value={task.project ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "__create__") { setShowNewProjectInput(true); setNewProjectDraft(""); return; }
+                    onSetProjectDraft(v);
+                    onSetProject(v);
+                  }}
+                  style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+                >
+                  <option value="">— no project —</option>
+                  {effectiveProjectOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+                  <option value="__create__">+ Create New Project</option>
+                </select>
+              )}
+            </div>
 
-          {/* Risk badges */}
-          {task.risk_state === "at_risk" && (
-            <span style={{ fontSize: 10, fontWeight: 600, background: "#FFEBE6", color: "#BF2600", borderRadius: 3, padding: "2px 6px" }}>AT RISK</span>
-          )}
-          {task.risk_state === "watch" && (
-            <span style={{ fontSize: 10, fontWeight: 600, background: "#FFFAE6", color: "#974F0C", borderRadius: 3, padding: "2px 6px" }}>WATCH</span>
-          )}
-          {(task.blocked_reason ?? "").trim() && (
-            <span style={{ fontSize: 10, fontWeight: 600, background: "#EAE6FF", color: "#403294", borderRadius: 3, padding: "2px 6px" }}>BLOCKED</span>
-          )}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                <label style={labelStyle}>Risk</label>
+                <select
+                  value={task.risk_state ?? "normal"}
+                  onChange={(e) => onSetRisk(e.target.value as NonNullable<Task["risk_state"]>)}
+                  style={{ ...inputStyle, width: "auto", flex: 1, minWidth: 0 }}
+                >
+                  {RISK_STATES.map((r) => <option key={r} value={r}>{{ normal: "Normal", watch: "Watch", at_risk: "At Risk", blocked: "Blocked" }[r]}</option>)}
+                </select>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, overflow: "hidden" }}>
+                <label style={labelStyle}>ETA</label>
+                <input
+                  type="datetime-local"
+                  defaultValue={task.eta ? task.eta.slice(0, 16) : ""}
+                  onBlur={(e) => {
+                    const v = e.currentTarget.value;
+                    onSetEta(v ? new Date(v).toISOString() : "");
+                  }}
+                  style={{ ...inputStyle, flex: 1, minWidth: 0, maxWidth: "100%" }}
+                />
+              </div>
+            </div>
 
-          {/* ETA badge */}
-          {task.eta && (
-            <span style={{ fontSize: 10, fontWeight: 600, background: "#E6F0FF", color: "#0052CC", borderRadius: 3, padding: "2px 6px" }}>
-              ETA {new Date(task.eta).toLocaleDateString()}
-            </span>
-          )}
-
-          {/* Stale badge */}
-          {isStale && (
-            <span style={{ fontSize: 10, fontWeight: 600, background: "#FFF3E0", color: "#BF360C", borderRadius: 3, padding: "2px 6px" }}>STALE &gt;48H</span>
-          )}
-        </div>
-
-        {/* ── Controls ── */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-          <label style={labelStyle}>Project</label>
-          {showNewProjectInput ? (
-            <>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+              <label style={{ ...labelStyle, marginTop: 3 }}>Blocker</label>
               <input
-                autoFocus
-                value={newProjectDraft}
-                onChange={(e) => setNewProjectDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") { e.preventDefault(); saveNewProject(); }
-                  if (e.key === "Escape") { setShowNewProjectInput(false); setNewProjectDraft(""); }
-                }}
-                placeholder="New project name"
-                style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+                defaultValue={task.blocked_reason ?? ""}
+                onBlur={(e) => onSetBlockedReason(e.currentTarget.value.trim())}
+                placeholder="Optional blocked reason"
+                style={inputStyle}
               />
-              <button onClick={saveNewProject} style={{ ...actionBtnStyle, padding: "2px 8px", fontSize: 11, flexShrink: 0 }}>Save</button>
-              <button onClick={() => { setShowNewProjectInput(false); setNewProjectDraft(""); }} style={{ ...actionBtnStyle, padding: "2px 8px", fontSize: 11, flexShrink: 0 }}>✕</button>
-            </>
-          ) : (
-            <select
-              value={task.project ?? ""}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v === "__create__") { setShowNewProjectInput(true); setNewProjectDraft(""); return; }
-                onSetProjectDraft(v);
-                onSetProject(v);
-              }}
-              style={{ ...inputStyle, flex: 1, minWidth: 0 }}
-            >
-              <option value="">— no project —</option>
-              {effectiveProjectOptions.map((p) => <option key={p} value={p}>{p}</option>)}
-              <option value="__create__">+ Create New Project</option>
-            </select>
-          )}
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <label style={labelStyle}>Risk</label>
-            <select
-              value={task.risk_state ?? "normal"}
-              onChange={(e) => onSetRisk(e.target.value as NonNullable<Task["risk_state"]>)}
-              style={{ ...inputStyle, width: "auto", flex: 1, minWidth: 0 }}
-            >
-              {RISK_STATES.map((r) => <option key={r} value={r}>{{ normal: "Normal", watch: "Watch", at_risk: "At Risk", blocked: "Blocked" }[r]}</option>)}
-            </select>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, overflow: "hidden" }}>
-            <label style={labelStyle}>ETA</label>
-            <input
-              type="datetime-local"
-              defaultValue={task.eta ? task.eta.slice(0, 16) : ""}
-              onBlur={(e) => {
-                const v = e.currentTarget.value;
-                onSetEta(v ? new Date(v).toISOString() : "");
-              }}
-              style={{ ...inputStyle, flex: 1, minWidth: 0, maxWidth: "100%" }}
-            />
-          </div>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
-          <label style={{ ...labelStyle, marginTop: 3 }}>Blocker</label>
-          <input
-            defaultValue={task.blocked_reason ?? ""}
-            onBlur={(e) => onSetBlockedReason(e.currentTarget.value.trim())}
-            placeholder="Optional blocked reason"
-            style={inputStyle}
-          />
-        </div>
+            </div>
+          </>
+        )}
 
         {/* Relative times */}
         {showRelativeTimes && (
@@ -408,15 +417,13 @@ export default function TaskCard({
           </p>
         )}
 
-        {/* Action buttons */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-          {colKey === "backlog" && (
-            <>
-              <button style={actionBtnStyle} onClick={onReorderUp} disabled={isFirst}>↑</button>
-              <button style={actionBtnStyle} onClick={onReorderDown} disabled={isLast}>↓</button>
-            </>
-          )}
-        </div>
+        {/* Reorder buttons — backlog only, hidden in compact mode */}
+        {!compactCards && colKey === "backlog" && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+            <button style={actionBtnStyle} onClick={onReorderUp} disabled={isFirst}>↑</button>
+            <button style={actionBtnStyle} onClick={onReorderDown} disabled={isLast}>↓</button>
+          </div>
+        )}
       </div>
       </div>{/* end card content */}
 
