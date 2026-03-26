@@ -225,25 +225,10 @@ export default function TaskCard({
       {/* ── Card body ── */}
       <div style={{ padding: compactCards ? "6px 10px 8px" : "8px 10px 10px", display: "flex", flexDirection: "column", gap }}>
 
-        {/* Title + avatar row */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6 }}>
-          <p style={{ fontSize: 14, fontWeight: 600, color: "#172B4D", lineHeight: 1.3, margin: 0 }}>
-            {task.title}
-          </p>
-          {isCompleted ? (
-            <span style={{
-              width: 28, height: 28, borderRadius: "50%", background: "#E3FCEF",
-              color: "#006644", fontSize: 14, fontWeight: 700,
-              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-            }}>✓</span>
-          ) : (
-            <span style={{
-              width: 28, height: 28, borderRadius: "50%", background: "#DFE1E6",
-              color: "#5E6C84", fontSize: 11, fontWeight: 700,
-              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-            }}>E</span>
-          )}
-        </div>
+        {/* Title row */}
+        <p style={{ fontSize: 14, fontWeight: 600, color: "#172B4D", lineHeight: 1.3, margin: 0 }}>
+          {task.title}
+        </p>
 
         {/* Meta row: priority pill + objective tag + badges */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
