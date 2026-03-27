@@ -45,8 +45,8 @@ type Props = {
   onSetBlockedReason: (taskId: string, reason: string) => void;
   onReorderUp: (taskId: string) => void;
   onReorderDown: (taskId: string) => void;
-  onReorderInColumn: (taskId: string, toIndex: number) => void;
-  onDropAtIndex: (taskId: string, toIndex: number) => void;
+  onReorderInColumn: (taskId: string, newSortOrder: number) => void;
+  onDropAtIndex: (taskId: string, newSortOrder: number) => void;
   onDelete: (taskId: string) => void;
   noHeader?: boolean;
   bodyMinHeight?: string;
@@ -132,12 +132,26 @@ export default function KanbanColumn({
         const taskId = e.dataTransfer.getData("text/task-id");
         if (!taskId) { setDropIndex(null); return; }
         const idx = dropIndex ?? tasks.length;
-        if (isDraggingWithin) {
-          // Skip the API call when the drop position is adjacent to the card's
-          // current position — the order would be unchanged.
-          if (!isNoOpDrop(idx)) onReorderInColumn(taskId, idx);
+
+        // Determine new sort_order from the tasks immediately above and below
+        // the placeholder — no index math, no splice adjustment needed.
+        const above = idx > 0 ? tasks[idx - 1] : null;
+        const below = idx < tasks.length ? tasks[idx] : null;
+        let newSortOrder: number;
+        if (!above && !below) {
+          newSortOrder = 10;
+        } else if (!above) {
+          newSortOrder = (below!.sort_order ?? 10) - 10;
+        } else if (!below) {
+          newSortOrder = (above!.sort_order ?? 10) + 10;
         } else {
-          onDropAtIndex(taskId, idx);
+          newSortOrder = ((above.sort_order ?? 10) + (below.sort_order ?? 10)) / 2;
+        }
+
+        if (isDraggingWithin) {
+          if (!isNoOpDrop(idx)) onReorderInColumn(taskId, newSortOrder);
+        } else {
+          onDropAtIndex(taskId, newSortOrder);
         }
         setDropIndex(null);
       }}

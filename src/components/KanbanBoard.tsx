@@ -642,68 +642,38 @@ export default function KanbanBoard() {
     }
   };
 
-  const dropAtIndex = async (taskId: string, colKey: Status, toIndex: number) => {
+  const dropAtIndex = async (taskId: string, colKey: Status, newSortOrder: number) => {
     setDraggingTaskId(null);
     setDropColumn(null);
     const target = tasks.find((t) => t.id === taskId);
     if (!target) return;
 
-    // Build the target column's current task list (task not yet in it) and
-    // insert the incoming task at the requested position.
-    const colTasks = [...grouped[colKey]];
-    const clampedIdx = Math.min(Math.max(toIndex, 0), colTasks.length);
-    colTasks.splice(clampedIdx, 0, { ...target, status: colKey });
-
-    // Assign consecutive sort_orders to every task in the column.
-    const updates = colTasks.map((t, i) => ({ id: t.id, sort_order: (i + 1) * 1000 }));
-
     const previous = tasks;
-    setTasks((prev) =>
-      prev.map((t) => {
-        const u = updates.find((u) => u.id === t.id);
-        if (t.id === taskId) return { ...t, status: colKey, sort_order: u!.sort_order };
-        return u ? { ...t, sort_order: u.sort_order } : t;
-      })
-    );
+    // Optimistic: move the task to the new column with the neighbour-averaged sort_order.
+    setTasks((prev) => prev.map((t) =>
+      t.id === taskId ? { ...t, status: colKey, sort_order: newSortOrder } : t
+    ));
 
     try {
-      // Patch status + sort_order for the moved task, sort_order only for others.
-      const movedOrder = updates.find((u) => u.id === taskId)!.sort_order;
-      await patchTask(taskId, { status: colKey, sort_order: movedOrder });
-      await Promise.all(
-        updates
-          .filter((u) => u.id !== taskId)
-          .map((u) => patchTask(u.id, { sort_order: u.sort_order }))
-      );
+      await patchTask(taskId, { status: colKey, sort_order: newSortOrder });
       const colLabel = colKey.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
       showToast(`"${target.title}" moved to ${colLabel}`);
+      await loadTasks();
     } catch (e: unknown) {
       setTasks(previous);
       setError(e instanceof Error ? e.message : "Move failed");
     }
   };
 
-  const reorderInColumn = async (taskId: string, colKey: Status, toIndex: number) => {
-    const colTasks = [...grouped[colKey]];
-    const fromIdx = colTasks.findIndex((t) => t.id === taskId);
-    if (fromIdx < 0) return;
-    // Remove the dragged task then insert at the adjusted position.
-    const [moved] = colTasks.splice(fromIdx, 1);
-    const insertAt = toIndex > fromIdx ? toIndex - 1 : toIndex;
-    colTasks.splice(insertAt, 0, moved);
-
-    // Assign consecutive sort_orders (spaced by 1000) to every task in the column.
-    const updates = colTasks.map((t, i) => ({ id: t.id, sort_order: (i + 1) * 1000 }));
-
+  const reorderInColumn = async (taskId: string, _colKey: Status, newSortOrder: number) => {
     const previous = tasks;
-    setTasks((prev) =>
-      prev.map((t) => {
-        const u = updates.find((u) => u.id === t.id);
-        return u ? { ...t, sort_order: u.sort_order } : t;
-      })
-    );
+    // Optimistic: update only this task's sort_order; neighbours are unchanged.
+    setTasks((prev) => prev.map((t) =>
+      t.id === taskId ? { ...t, sort_order: newSortOrder } : t
+    ));
     try {
-      await Promise.all(updates.map((u) => patchTask(u.id, { sort_order: u.sort_order })));
+      await patchTask(taskId, { sort_order: newSortOrder });
+      await loadTasks();
     } catch (e: unknown) {
       setTasks(previous);
       setError(e instanceof Error ? e.message : "Reorder failed");
@@ -1147,8 +1117,8 @@ export default function KanbanBoard() {
             onSetBlockedReason={(taskId, reason) => void setBlockedReasonForTask(taskId, reason)}
             onReorderUp={(taskId) => void reorderBacklog(taskId, "up")}
             onReorderDown={(taskId) => void reorderBacklog(taskId, "down")}
-            onReorderInColumn={(taskId, toIndex) => void reorderInColumn(taskId, col.key, toIndex)}
-            onDropAtIndex={(taskId, toIndex) => void dropAtIndex(taskId, col.key, toIndex)}
+            onReorderInColumn={(taskId, newSortOrder) => void reorderInColumn(taskId, col.key, newSortOrder)}
+            onDropAtIndex={(taskId, newSortOrder) => void dropAtIndex(taskId, col.key, newSortOrder)}
             onDelete={(taskId) => deleteTask(taskId)}
           />
         ))}
